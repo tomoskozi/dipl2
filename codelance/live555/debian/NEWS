@@ -1,0 +1,17 @@
+liblivemedia (2011.12.23-1) unstable; urgency=low
+
+  Note that the license of this package has changed back from GPL to LGPL. This
+  change is effective since this liblivemedia version.
+
+ -- Benjamin Drung <bdrung@debian.org>  Fri, 30 Dec 2011 14:49:20 +0100
+
+liblivemedia (2010.04.09-1) unstable; urgency=medium
+
+  Note that the license of this package has changed from LGPL to GPL. This
+  change is effective since liblivemedia 2008.07.25-1.
+
+  If you need to build and distribute non-GPL'd application with liblivemedia
+  you need to recompile this package without
+  debian/patches/022_safe_setlocale.diff. But you will loose thread safety.
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Tue, 20 Apr 2010 23:55:12 +0100

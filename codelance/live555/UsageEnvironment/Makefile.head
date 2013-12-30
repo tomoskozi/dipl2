@@ -1,0 +1,2 @@
+INCLUDES = -Iinclude -I../groupsock/include -pthread
+##### Change the following for your environment: 

@@ -1,0 +1,1385 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ liblivemedia (2011.12.23-1) unstable; urgency=low
+ .
+   * Team upload.
+   * New upstream release (Closes: #652661).
+   * Refresh patches and drop patches that are applied upstream in a similar way.
+   * Pull latest upstream changelog.
+   * We don't carry any GPL'd patches any more. The package license is back
+     to LGPL.
+   * Add build-arch and build-indep targets to make lintian happy.
+Author: Benjamin Drung <bdrung@debian.org>
+Bug-Debian: http://bugs.debian.org/652661
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- liblivemedia-2011.12.23.orig/config.linux
++++ liblivemedia-2011.12.23/config.linux
+@@ -4,7 +4,7 @@ C_COMPILER =		cc
+ C_FLAGS =		$(COMPILE_OPTS)
+ CPP =			cpp
+ CPLUSPLUS_COMPILER =	c++
+-CPLUSPLUS_FLAGS =	$(COMPILE_OPTS) -Wall -DBSD=1
++CPLUSPLUS_FLAGS =	$(COMPILE_OPTS) -Wall -DBSD=1 -pthread -std=c++0x -pthread
+ OBJ =			o
+ LINK =			c++ -o
+ LINK_OPTS =		-L.
+--- liblivemedia-2011.12.23.orig/liveMedia/MultiFramedRTPSource.cpp
++++ liblivemedia-2011.12.23/liveMedia/MultiFramedRTPSource.cpp
+@@ -23,6 +23,8 @@ along with this library; if not, write t
+ #include "GroupsockHelper.hh"
+ #include <string.h>
+ 
++#include "NCRTPSource.hh"
++
+ ////////// ReorderingPacketBuffer definition //////////
+ 
+ class ReorderingPacketBuffer {
+@@ -126,13 +128,65 @@ void MultiFramedRTPSource::doGetNextFram
+   doGetNextFrame1();
+ }
+ 
++static void write_packet_dump(const unsigned char *buf, unsigned short len)
++{
++    if (buf != NULL && len != 0) {
++        int i;
++
++        for (i = 0; i < len; i += 8) {
++            int j;
++
++            printf("%04x ", i);
++            for (j = 0; j < 8 && (i + j) < len; j++) {
++                printf("%02x ", buf[i + j]);
++            }
++            printf("\n");
++        }
++	printf("\n");
++    }
++} /* write_packet_dump */
++
++#if 0
++static unsigned char g_rtp_pkt[] =
++{
++    /* RTP ------------------------------------ */
++    /* version[2]=2 padding[1]=0 extension[1]=0 */
++    /* cc[4]=0 */
++    0x80,
++    /* m[1]=0 pt[7]=0 */
++    0x04,
++    /* sequence_number[16] */
++    0x11, 0x11,
++    /* time stamp[32] */
++    0x11, 0x11, 0x11, 0x11,
++    /* ssrc[32] */
++    0x00, 0x23, 0x18, 0x75,
++    /* csrc[cc*8] */
++    /* extension header[0|32] */
++    /* payload -------------------------------- */
++    0x11, 0x11, 0x11
++}; /* g_ip6_rtp_pkt */
++#endif
++
++//extern RTSPClient *g_pRtspClient;
++codelance::NCRTPSource g_ncSource;
++
+ void MultiFramedRTPSource::doGetNextFrame1() {
+   while (fNeedDelivery) {
+     // If we already have packet data available, then deliver it now.
+     Boolean packetLossPrecededThis;
+     BufferedPacket* nextPacket
+       = fReorderingBuffer->getNextCompletedPacket(packetLossPrecededThis);
+-    if (nextPacket == NULL) break;
++    if (nextPacket == NULL)
++    {
++        //printf("FUCK!!\n");
++        break;
++    }
++
++    /*nextPacket->reset();
++    nextPacket->appendData(g_rtp_pkt, sizeof (g_rtp_pkt));*/
++    //write_packet_dump(nextPacket->data(), nextPacket->dataSize());
++    //printf("--bufSz %d\n", nextPacket->dataSize());
+ 
+     fNeedDelivery = False;
+ 
+@@ -373,8 +427,43 @@ Boolean BufferedPacket::fillInData(RTPIn
+   if (!rtpInterface.handleRead(&fBuf[fTail], fPacketSize-fTail, numBytesRead, fromAddress, packetReadWasIncomplete)) {
+     return False;
+   }
++
+   fTail += numBytesRead;
++
++  /*memcpy(&fBuf[fHead], g_rtp_pkt, sizeof (g_rtp_pkt));
++  fTail = fHead + sizeof (g_rtp_pkt);*/
++
++#if 1
++  static unsigned long long timer = 0U;
++  CLEAN_UP((&g_ncSource), ++timer);
++
++  g_ncSource.PushCode(&fBuf[fHead], fTail - fHead);
++  size_t sz = fTail - fHead;
++  if(!g_ncSource.PopPacket(&fBuf[fHead], &sz))
++  {
++    return False;
++  }
++#else
++  unsigned char *pPkt = &fBuf[fHead];
++  size_t sz = fTail - fHead;
++  static FILE *pDump = fopen("decoding.csv", "w");
++  boost::posix_time::ptime now = 
++    boost::posix_time::microsec_clock::local_time();
++  boost::posix_time::time_duration td = now.time_of_day();
++  if ( ((pPkt[2] << 8) + pPkt[3]) != 0 )
++  {
++    fprintf(pDump, "%lu;%u;%ld\n",
++      0LU, (pPkt[2] << 8) + pPkt[3], td.total_milliseconds());
++  }
++#endif
++
++  //printf("%d\n", sz);
++  fTail = fHead + sz;
++  //printf("fillInData\n");
++  //write_packet_dump(&fBuf[fHead], fTail - fHead);
++
+   return True;
++  //return False;
+ }
+ 
+ void BufferedPacket
+--- liblivemedia-2011.12.23.orig/liveMedia/RTPInterface.cpp
++++ liblivemedia-2011.12.23/liveMedia/RTPInterface.cpp
+@@ -218,6 +218,24 @@ void RTPInterface
+   }
+ }
+ 
++static void write_packet_dump(const unsigned char *buf, unsigned short len)
++{
++    if (buf != NULL && len != 0) {
++        int i;
++
++        for (i = 0; i < len; i += 8) {
++            int j;
++
++            printf("%04x ", i);
++            for (j = 0; j < 8 && (i + j) < len; j++) {
++                printf("%02x ", buf[i + j]);
++            }
++            printf("\n");
++        }
++	printf("\n");
++    }
++} /* write_packet_dump */
++
+ Boolean RTPInterface::handleRead(unsigned char* buffer, unsigned bufferMaxSize,
+ 				 unsigned& bytesRead, struct sockaddr_in& fromAddress, Boolean& packetReadWasIncomplete) {
+   packetReadWasIncomplete = False; // by default
+@@ -225,6 +243,7 @@ Boolean RTPInterface::handleRead(unsigne
+   if (fNextTCPReadStreamSocketNum < 0) {
+     // Normal case: read from the (datagram) 'groupsock':
+     readSuccess = fGS->handleRead(buffer, bufferMaxSize, bytesRead, fromAddress);
++    /*write_packet_dump(buffer, bytesRead);*/
+   } else {
+     // Read from the TCP connection:
+     bytesRead = 0;
+--- liblivemedia-2011.12.23.orig/liveMedia/Makefile.head
++++ liblivemedia-2011.12.23/liveMedia/Makefile.head
+@@ -1,2 +1,2 @@
+-INCLUDES = -Iinclude -I../UsageEnvironment/include -I../groupsock/include
++INCLUDES = -Iinclude -I../UsageEnvironment/include -I../groupsock/include -I../../dep/boost -I../../dep/fifi/src -I../../dep/sak/src -I../../dep/kodo
+ ##### Change the following for your environment: 
+--- liblivemedia-2011.12.23.orig/liveMedia/MultiFramedRTPSink.cpp
++++ liblivemedia-2011.12.23/liveMedia/MultiFramedRTPSink.cpp
+@@ -193,7 +193,7 @@ void MultiFramedRTPSink::buildAndSendPac
+ 
+ void MultiFramedRTPSink::packFrame() {
+   // Get the next frame.
+-
++printf("\n-------safdas\n");
+   // First, see if we have an overflow frame that was too big for the last pkt
+   if (fOutBuf->haveOverflowData()) {
+     // Use this frame before reading a new one from the source
+--- liblivemedia-2011.12.23.orig/liveMedia/RTSPClient.cpp
++++ liblivemedia-2011.12.23/liveMedia/RTSPClient.cpp
+@@ -45,6 +45,24 @@ unsigned RTSPClient::sendOptionsCommand(
+   return sendRequest(new RequestRecord(++fCSeq, "OPTIONS", responseHandler));
+ }
+ 
++unsigned RTSPClient::sendNCFeedbackCommand(size_t matId, size_t repeat, responseHandler* responseHandler)
++{
++    char ext[100] = { 0 };
++    sprintf(ext, "Repeat: %lu\r\nTimes: %lu\r\n", matId, repeat);
++    //printf("Sending NC feedback!\n%s", ext);
++
++    return sendRequest(new RequestRecord(++fCSeq, "NC", responseHandler, ext));
++} /* sendNCFeedbackCommand */
++
++unsigned RTSPClient::sendNCFeedbackCommand(size_t matId, std::vector<uint8_t> *fb, responseHandler* responseHandler)
++{
++    char ext[500] = { 0 };
++    sprintf(ext, "SW\r\nRepeat: %lu\r\nFeedback: %s\r\n", matId, &fb[0]);
++    //printf("Sending NC feedback!\n%s", ext);
++
++    return sendRequest(new RequestRecord(++fCSeq, "NC", responseHandler, ext));
++} /* sendNCFeedbackCommand */
++
+ unsigned RTSPClient::sendAnnounceCommand(char const* sdpDescription, responseHandler* responseHandler, Authenticator* authenticator) {
+   if (authenticator != NULL) fCurrentAuthenticator = *authenticator;
+   return sendRequest(new RequestRecord(++fCSeq, "ANNOUNCE", responseHandler, NULL, NULL, False, 0.0, 0.0, 0.0, sdpDescription));
+@@ -549,7 +567,9 @@ unsigned RTSPClient::sendRequest(Request
+       contentLengthHeaderWasAllocated = True;
+     }
+ 
+-    if (strcmp(request->commandName(), "DESCRIBE") == 0) {
++    if (strcmp(request->commandName(), "NC") == 0) {
++      extraHeaders = request->getNCExtension();//= (char*)"Repeat: 10\r\n";
++    } else if (strcmp(request->commandName(), "DESCRIBE") == 0) {
+       extraHeaders = (char*)"Accept: application/sdp\r\n";
+     } else if (strcmp(request->commandName(), "OPTIONS") == 0) {
+     } else if (strcmp(request->commandName(), "ANNOUNCE") == 0) {
+@@ -764,7 +784,11 @@ unsigned RTSPClient::sendRequest(Request
+     }
+ 
+     // The command send succeeded, so enqueue the request record, so that its response (when it comes) can be handled:
+-    fRequestsAwaitingResponse.enqueue(request);
++    // if not NC command
++    if (strcmp(request->commandName(), "NC") != 0)
++    {
++        fRequestsAwaitingResponse.enqueue(request);
++    }
+ 
+     delete[] cmd;
+     return request->cseq();
+@@ -1586,6 +1610,13 @@ RTSPClient::RequestRecord::RequestRecord
+     fStart(start), fEnd(end), fScale(scale), fContentStr(strDup(contentStr)), fHandler(handler) {
+ }
+ 
++RTSPClient::RequestRecord::RequestRecord(unsigned cseq, char const* commandName, responseHandler* handler,
++					 char* NCExtensionStr, MediaSession* session, MediaSubsession* subsession, u_int32_t booleanFlags,
++					 double start, double end, float scale, char const* contentStr)
++  : fNext(NULL), fCSeq(cseq), fCommandName(commandName), fSession(session), fSubsession(subsession), fBooleanFlags(booleanFlags),
++    fStart(start), fEnd(end), fScale(scale), fContentStr(strDup(contentStr)), fHandler(handler), NCExtensionStr(NCExtensionStr) {
++}
++
+ RTSPClient::RequestRecord::~RequestRecord() {
+   // Delete the rest of the list first:
+   delete fNext;
+--- /dev/null
++++ liblivemedia-2011.12.23/liveMedia/crc.cpp
+@@ -0,0 +1,209 @@
++#include "crc.hh"
++
++#include <assert.h>
++
++typedef unsigned char u8;
++typedef unsigned int u32;
++#define NULL 0
++
++static u8 crc_table_3bit[] = {
++     (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05, (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03,
++     (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01, (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00,
++     (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00,
++     (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06,
++     (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01,
++     (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06,
++     (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00, (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01,
++     (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07,
++     (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07,
++     (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04,
++     (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01,
++     (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07,
++     (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00,
++     (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04,
++     (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00, (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03,
++     (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05,
++     (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00, (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06,
++     (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04, (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05,
++     (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01, (u8)0x02, (u8)0x04, (u8)0x03, (u8)0x05,
++     (u8)0x00, (u8)0x06, (u8)0x01, (u8)0x07, (u8)0x06, (u8)0x00, (u8)0x07, (u8)0x01, (u8)0x04, (u8)0x02, (u8)0x05, (u8)0x03,
++     (u8)0x07, (u8)0x01, (u8)0x06, (u8)0x00, (u8)0x05, (u8)0x03, (u8)0x04, (u8)0x02, (u8)0x03, (u8)0x05, (u8)0x02, (u8)0x04,
++     (u8)0x01, (u8)0x07, (u8)0x00, (u8)0x06
++};
++
++static u8 crc_table_7bit[] = {
++     (u8)0x00, (u8)0x40, (u8)0x73, (u8)0x33, (u8)0x15, (u8)0x55, (u8)0x66, (u8)0x26, (u8)0x2A, (u8)0x6A, (u8)0x59, (u8)0x19,
++     (u8)0x3F, (u8)0x7F, (u8)0x4C, (u8)0x0C, (u8)0x54, (u8)0x14, (u8)0x27, (u8)0x67, (u8)0x41, (u8)0x01, (u8)0x32, (u8)0x72,
++     (u8)0x7E, (u8)0x3E, (u8)0x0D, (u8)0x4D, (u8)0x6B, (u8)0x2B, (u8)0x18, (u8)0x58, (u8)0x5B, (u8)0x1B, (u8)0x28, (u8)0x68,
++     (u8)0x4E, (u8)0x0E, (u8)0x3D, (u8)0x7D, (u8)0x71, (u8)0x31, (u8)0x02, (u8)0x42, (u8)0x64, (u8)0x24, (u8)0x17, (u8)0x57,
++     (u8)0x0F, (u8)0x4F, (u8)0x7C, (u8)0x3C, (u8)0x1A, (u8)0x5A, (u8)0x69, (u8)0x29, (u8)0x25, (u8)0x65, (u8)0x56, (u8)0x16,
++     (u8)0x30, (u8)0x70, (u8)0x43, (u8)0x03, (u8)0x45, (u8)0x05, (u8)0x36, (u8)0x76, (u8)0x50, (u8)0x10, (u8)0x23, (u8)0x63,
++     (u8)0x6F, (u8)0x2F, (u8)0x1C, (u8)0x5C, (u8)0x7A, (u8)0x3A, (u8)0x09, (u8)0x49, (u8)0x11, (u8)0x51, (u8)0x62, (u8)0x22,
++     (u8)0x04, (u8)0x44, (u8)0x77, (u8)0x37, (u8)0x3B, (u8)0x7B, (u8)0x48, (u8)0x08, (u8)0x2E, (u8)0x6E, (u8)0x5D, (u8)0x1D,
++     (u8)0x1E, (u8)0x5E, (u8)0x6D, (u8)0x2D, (u8)0x0B, (u8)0x4B, (u8)0x78, (u8)0x38, (u8)0x34, (u8)0x74, (u8)0x47, (u8)0x07,
++     (u8)0x21, (u8)0x61, (u8)0x52, (u8)0x12, (u8)0x4A, (u8)0x0A, (u8)0x39, (u8)0x79, (u8)0x5F, (u8)0x1F, (u8)0x2C, (u8)0x6C,
++     (u8)0x60, (u8)0x20, (u8)0x13, (u8)0x53, (u8)0x75, (u8)0x35, (u8)0x06, (u8)0x46, (u8)0x79, (u8)0x39, (u8)0x0A, (u8)0x4A,
++     (u8)0x6C, (u8)0x2C, (u8)0x1F, (u8)0x5F, (u8)0x53, (u8)0x13, (u8)0x20, (u8)0x60, (u8)0x46, (u8)0x06, (u8)0x35, (u8)0x75,
++     (u8)0x2D, (u8)0x6D, (u8)0x5E, (u8)0x1E, (u8)0x38, (u8)0x78, (u8)0x4B, (u8)0x0B, (u8)0x07, (u8)0x47, (u8)0x74, (u8)0x34,
++     (u8)0x12, (u8)0x52, (u8)0x61, (u8)0x21, (u8)0x22, (u8)0x62, (u8)0x51, (u8)0x11, (u8)0x37, (u8)0x77, (u8)0x44, (u8)0x04,
++     (u8)0x08, (u8)0x48, (u8)0x7B, (u8)0x3B, (u8)0x1D, (u8)0x5D, (u8)0x6E, (u8)0x2E, (u8)0x76, (u8)0x36, (u8)0x05, (u8)0x45,
++     (u8)0x63, (u8)0x23, (u8)0x10, (u8)0x50, (u8)0x5C, (u8)0x1C, (u8)0x2F, (u8)0x6F, (u8)0x49, (u8)0x09, (u8)0x3A, (u8)0x7A,
++     (u8)0x3C, (u8)0x7C, (u8)0x4F, (u8)0x0F, (u8)0x29, (u8)0x69, (u8)0x5A, (u8)0x1A, (u8)0x16, (u8)0x56, (u8)0x65, (u8)0x25,
++     (u8)0x03, (u8)0x43, (u8)0x70, (u8)0x30, (u8)0x68, (u8)0x28, (u8)0x1B, (u8)0x5B, (u8)0x7D, (u8)0x3D, (u8)0x0E, (u8)0x4E,
++     (u8)0x42, (u8)0x02, (u8)0x31, (u8)0x71, (u8)0x57, (u8)0x17, (u8)0x24, (u8)0x64, (u8)0x67, (u8)0x27, (u8)0x14, (u8)0x54,
++     (u8)0x72, (u8)0x32, (u8)0x01, (u8)0x41, (u8)0x4D, (u8)0x0D, (u8)0x3E, (u8)0x7E, (u8)0x58, (u8)0x18, (u8)0x2B, (u8)0x6B,
++     (u8)0x33, (u8)0x73, (u8)0x40, (u8)0x00, (u8)0x26, (u8)0x66, (u8)0x55, (u8)0x15, (u8)0x19, (u8)0x59, (u8)0x6A, (u8)0x2A,
++     (u8)0x0C, (u8)0x4C, (u8)0x7F, (u8)0x3F
++};
++
++static u8 crc_table_8bit[] = {
++     (u8)0x00, (u8)0x91, (u8)0xE3, (u8)0x72, (u8)0x07, (u8)0x96, (u8)0xE4, (u8)0x75, (u8)0x0E, (u8)0x9F, (u8)0xED, (u8)0x7C,
++     (u8)0x09, (u8)0x98, (u8)0xEA, (u8)0x7B, (u8)0x1C, (u8)0x8D, (u8)0xFF, (u8)0x6E, (u8)0x1B, (u8)0x8A, (u8)0xF8, (u8)0x69,
++     (u8)0x12, (u8)0x83, (u8)0xF1, (u8)0x60, (u8)0x15, (u8)0x84, (u8)0xF6, (u8)0x67, (u8)0x38, (u8)0xA9, (u8)0xDB, (u8)0x4A,
++     (u8)0x3F, (u8)0xAE, (u8)0xDC, (u8)0x4D, (u8)0x36, (u8)0xA7, (u8)0xD5, (u8)0x44, (u8)0x31, (u8)0xA0, (u8)0xD2, (u8)0x43,
++     (u8)0x24, (u8)0xB5, (u8)0xC7, (u8)0x56, (u8)0x23, (u8)0xB2, (u8)0xC0, (u8)0x51, (u8)0x2A, (u8)0xBB, (u8)0xC9, (u8)0x58,
++     (u8)0x2D, (u8)0xBC, (u8)0xCE, (u8)0x5F, (u8)0x70, (u8)0xE1, (u8)0x93, (u8)0x02, (u8)0x77, (u8)0xE6, (u8)0x94, (u8)0x05,
++     (u8)0x7E, (u8)0xEF, (u8)0x9D, (u8)0x0C, (u8)0x79, (u8)0xE8, (u8)0x9A, (u8)0x0B, (u8)0x6C, (u8)0xFD, (u8)0x8F, (u8)0x1E,
++     (u8)0x6B, (u8)0xFA, (u8)0x88, (u8)0x19, (u8)0x62, (u8)0xF3, (u8)0x81, (u8)0x10, (u8)0x65, (u8)0xF4, (u8)0x86, (u8)0x17,
++     (u8)0x48, (u8)0xD9, (u8)0xAB, (u8)0x3A, (u8)0x4F, (u8)0xDE, (u8)0xAC, (u8)0x3D, (u8)0x46, (u8)0xD7, (u8)0xA5, (u8)0x34,
++     (u8)0x41, (u8)0xD0, (u8)0xA2, (u8)0x33, (u8)0x54, (u8)0xC5, (u8)0xB7, (u8)0x26, (u8)0x53, (u8)0xC2, (u8)0xB0, (u8)0x21,
++     (u8)0x5A, (u8)0xCB, (u8)0xB9, (u8)0x28, (u8)0x5D, (u8)0xCC, (u8)0xBE, (u8)0x2F, (u8)0xE0, (u8)0x71, (u8)0x03, (u8)0x92,
++     (u8)0xE7, (u8)0x76, (u8)0x04, (u8)0x95, (u8)0xEE, (u8)0x7F, (u8)0x0D, (u8)0x9C, (u8)0xE9, (u8)0x78, (u8)0x0A, (u8)0x9B,
++     (u8)0xFC, (u8)0x6D, (u8)0x1F, (u8)0x8E, (u8)0xFB, (u8)0x6A, (u8)0x18, (u8)0x89, (u8)0xF2, (u8)0x63, (u8)0x11, (u8)0x80,
++     (u8)0xF5, (u8)0x64, (u8)0x16, (u8)0x87, (u8)0xD8, (u8)0x49, (u8)0x3B, (u8)0xAA, (u8)0xDF, (u8)0x4E, (u8)0x3C, (u8)0xAD,
++     (u8)0xD6, (u8)0x47, (u8)0x35, (u8)0xA4, (u8)0xD1, (u8)0x40, (u8)0x32, (u8)0xA3, (u8)0xC4, (u8)0x55, (u8)0x27, (u8)0xB6,
++     (u8)0xC3, (u8)0x52, (u8)0x20, (u8)0xB1, (u8)0xCA, (u8)0x5B, (u8)0x29, (u8)0xB8, (u8)0xCD, (u8)0x5C, (u8)0x2E, (u8)0xBF,
++     (u8)0x90, (u8)0x01, (u8)0x73, (u8)0xE2, (u8)0x97, (u8)0x06, (u8)0x74, (u8)0xE5, (u8)0x9E, (u8)0x0F, (u8)0x7D, (u8)0xEC,
++     (u8)0x99, (u8)0x08, (u8)0x7A, (u8)0xEB, (u8)0x8C, (u8)0x1D, (u8)0x6F, (u8)0xFE, (u8)0x8B, (u8)0x1A, (u8)0x68, (u8)0xF9,
++     (u8)0x82, (u8)0x13, (u8)0x61, (u8)0xF0, (u8)0x85, (u8)0x14, (u8)0x66, (u8)0xF7, (u8)0xA8, (u8)0x39, (u8)0x4B, (u8)0xDA,
++     (u8)0xAF, (u8)0x3E, (u8)0x4C, (u8)0xDD, (u8)0xA6, (u8)0x37, (u8)0x45, (u8)0xD4, (u8)0xA1, (u8)0x30, (u8)0x42, (u8)0xD3,
++     (u8)0xB4, (u8)0x25, (u8)0x57, (u8)0xC6, (u8)0xB3, (u8)0x22, (u8)0x50, (u8)0xC1, (u8)0xBA, (u8)0x2B, (u8)0x59, (u8)0xC8,
++     (u8)0xBD, (u8)0x2C, (u8)0x5E, (u8)0xCF
++};
++
++static u32 crc_table_32bit[] = {
++     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
++     0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
++     0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
++     0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
++     0x1db71064, 0x6ab020f2, 0xf3b97148, 0x84be41de,
++     0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
++     0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec,
++     0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5,
++     0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
++     0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b,
++     0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940,
++     0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
++     0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116,
++     0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f,
++     0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
++     0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d,
++     0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a,
++     0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
++     0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818,
++     0x7f6a0dbb, 0x086d3d2d, 0x91646c97, 0xe6635c01,
++     0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
++     0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457,
++     0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c,
++     0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65,
++     0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2,
++     0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb,
++     0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
++     0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9,
++     0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086,
++     0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f,
++     0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4,
++     0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad,
++     0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a,
++     0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683,
++     0xe3630b12, 0x94643b84, 0x0d6d6a3e, 0x7a6a5aa8,
++     0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1,
++     0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe,
++     0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7,
++     0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc,
++     0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5,
++     0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252,
++     0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
++     0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60,
++     0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79,
++     0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236,
++     0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f,
++     0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04,
++     0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d,
++     0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a,
++     0x9c0906a9, 0xeb0e363f, 0x72076785, 0x05005713,
++     0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38,
++     0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21,
++     0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e,
++     0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777,
++     0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c,
++     0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45,
++     0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
++     0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db,
++     0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0,
++     0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9,
++     0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6,
++     0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf,
++     0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
++     0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
++};
++
++
++uint crc_3bit(const uchar* const data, uint const len)
++{
++    uint i, crc;
++    
++    assert((data != NULL) && (len > 0) && (len < 256));
++    
++    crc = 0x7;
++    for (i = 0; i < len; i++)
++        crc = crc_table_3bit[(uint)(data[i] ^ crc)];
++
++    assert(crc <= 0x7 );
++
++    return crc;
++}
++
++uint crc_7bit(const uchar* const data, uint const len)
++{
++    uint i, crc;
++
++    assert((data != NULL) && (len > 0) && (len < 256));
++
++    crc = 0x7f;
++    for (i = 0; i < len; i++)
++        crc = crc_table_7bit[(uint)(data[i] ^ crc)];
++
++    assert(crc <= 0x7f);
++
++    return crc;
++}
++
++uint crc_8bit(const uchar* const data, uint const len)
++{
++    uint i, crc;
++
++    /* 256 not enough for tunneling */
++    assert((data != NULL) /*&& (len > 0) && (len < 256)*/);
++
++    crc = 0xff;
++    for (i = 0; i < len; i++)
++        crc = crc_table_8bit[(uint)(data[i] ^ crc)];
++
++    assert(crc <= 0xff);
++
++    return crc;
++}
++
++uint crc_32bit(const uchar* const data, uint const len)
++{
++    uint i, crc;
++
++    assert((data != NULL) && (len > 0) && (len < 256));
++
++    crc = 0xffffffff;
++    for (i = 0; i < len; i++)
++        crc = (crc >> 8) ^ crc_table_32bit[(crc ^ data[i]) & 0xFF];
++
++    return crc;
++}
+--- liblivemedia-2011.12.23.orig/liveMedia/Makefile.tail
++++ liblivemedia-2011.12.23/liveMedia/Makefile.tail
+@@ -1,5 +1,7 @@
+ ##### End of variables to change
+ 
++CPLUSPLUS_FLAGS += -std=c++0x
++
+ LIVEMEDIA_LIB = libliveMedia.$(LIB_SUFFIX)
+ ALL = $(LIVEMEDIA_LIB)
+ all:	$(ALL)
+@@ -49,7 +51,7 @@ MATROSKA_SERVER_MEDIA_SUBSESSION_OBJS =
+ MATROSKA_RTSP_SERVER_OBJS = MatroskaFileServerDemux.$(OBJ) $(MATROSKA_SERVER_MEDIA_SUBSESSION_OBJS)
+ MATROSKA_OBJS = $(MATROSKA_FILE_OBJS) $(MATROSKA_RTSP_SERVER_OBJS)
+ 
+-MISC_OBJS = DarwinInjector.$(OBJ) BitVector.$(OBJ) StreamParser.$(OBJ) DigestAuthentication.$(OBJ) our_md5.$(OBJ) our_md5hl.$(OBJ) Base64.$(OBJ) Locale.$(OBJ)
++MISC_OBJS = crc.$(OBJ) DarwinInjector.$(OBJ) BitVector.$(OBJ) StreamParser.$(OBJ) DigestAuthentication.$(OBJ) our_md5.$(OBJ) our_md5hl.$(OBJ) Base64.$(OBJ) Locale.$(OBJ)
+ 
+ LIVEMEDIA_LIB_OBJS = Media.$(OBJ) $(MISC_SOURCE_OBJS) $(MISC_SINK_OBJS) $(MISC_FILTER_OBJS) $(RTP_OBJS) $(RTCP_OBJS) $(RTSP_OBJS) $(SIP_OBJS) $(SESSION_OBJS) $(QUICKTIME_OBJS) $(AVI_OBJS) $(TRANSPORT_STREAM_TRICK_PLAY_OBJS) $(MATROSKA_OBJS) $(MISC_OBJS)
+ 
+@@ -58,6 +60,7 @@ $(LIVEMEDIA_LIB): $(LIVEMEDIA_LIB_OBJS)
+ 	$(LIBRARY_LINK)$@ $(LIBRARY_LINK_OPTS) \
+ 		$(LIVEMEDIA_LIB_OBJS)
+ 
++crc.$(CPP):			include/crc.hh
+ Media.$(CPP):		include/Media.hh
+ include/Media.hh:	include/liveMedia_version.hh
+ MediaSource.$(CPP):	include/MediaSource.hh
+--- liblivemedia-2011.12.23.orig/liveMedia/include/RTSPClient.hh
++++ liblivemedia-2011.12.23/liveMedia/include/RTSPClient.hh
+@@ -31,6 +31,8 @@ along with this library; if not, write t
+ #include "DigestAuthentication.hh"
+ #endif
+ 
++#include <vector>
++
+ #define RTSPCLIENT_SYNCHRONOUS_INTERFACE 1 // For now, continue to support the old synchronous interface as well
+ 
+ class RTSPClient: public Medium {
+@@ -137,6 +139,9 @@ public:
+       //  of an implementation of a 'timeout handler' on the command, for example.)
+       // This function returns True iff "cseq" was for a valid previously-performed command (whose response is still unhandled).
+ 
++  unsigned sendNCFeedbackCommand(size_t matId, size_t repeat, responseHandler* responseHandler);
++  unsigned sendNCFeedbackCommand(size_t matId, std::vector<uint8_t> *fb, responseHandler* responseHandler);
++
+   int socketNum() const { return fInputSocketNum; }
+ 
+   static Boolean lookupByName(UsageEnvironment& env,
+@@ -175,6 +180,10 @@ public: // Some compilers complain if th
+     RequestRecord(unsigned cseq, char const* commandName, responseHandler* handler,
+ 		  MediaSession* session = NULL, MediaSubsession* subsession = NULL, u_int32_t booleanFlags = 0,
+ 		  double start = 0.0f, double end = -1.0f, float scale = 1.0f, char const* contentStr = NULL);
++    RequestRecord(unsigned cseq, char const* commandName, responseHandler* handler,
++		  char* NCExtensionStr, 
++          MediaSession* session = NULL, MediaSubsession* subsession = NULL, u_int32_t booleanFlags = 0,
++		  double start = 0.0f, double end = -1.0f, float scale = 1.0f, char const* contentStr = NULL);
+     virtual ~RequestRecord();
+ 
+     RequestRecord*& next() { return fNext; }
+@@ -189,6 +198,8 @@ public: // Some compilers complain if th
+     char* contentStr() const { return fContentStr; }
+     responseHandler*& handler() { return fHandler; }
+ 
++    char* getNCExtension() { return this->NCExtensionStr; }
++
+   private:
+     RequestRecord* fNext;
+     unsigned fCSeq;
+@@ -200,6 +211,8 @@ public: // Some compilers complain if th
+     float fScale;
+     char* fContentStr;
+     responseHandler* fHandler;
++
++    char* NCExtensionStr;
+   };
+ private:
+   class RequestQueue {
+--- /dev/null
++++ liblivemedia-2011.12.23/liveMedia/include/crc.hh
+@@ -0,0 +1,58 @@
++#ifndef CRC_H
++#define CRC_H
++
++typedef unsigned        uint;
++typedef unsigned char   uchar;
++
++/**
++ *  Calculate the 3-bit CRC using the polynomial 1 + x + x^3 for the given
++ *  data and data length.
++ *  The initial value 0x07 must be set outside this function. The resulting
++ *  CRC value is stored in the lower 3 bits of *crc.
++ *  @param data [in] Pointer to the start of data for CRC calculation.
++ *  @param len [in] Length of the data for CRC calculation.
++ *  @param crc [in,out] Pointer to the initial CRC value. This value is updated
++ *                      during the CRC calculation.
++ */
++uint crc_3bit(const uchar* const data, const uint len);
++
++/**
++ *  Calculate the 7-bit CRC using the polynomial 1 + x + x^2 + x^3 + x^6 + x^7
++ *  for the given data and data length.
++ *  The initial value 0x7F must be set outside this function. The resulting
++ *  CRC value is stored in the lower 7 bits of *crc.
++ *  @param data [in] Pointer to the start of data for CRC calculation.
++ *  @param len [in] Length of the data for CRC calculation.
++ *  @param crc [in,out] Pointer to the initial CRC value. This value is updated
++ *                      during the CRC calculation.
++ */
++uint crc_7bit(const uchar* const data, const uint len);
++
++/**
++ *  Calculate the 8-bit CRC using the polynomial 1 + x + x^2 + x^8
++ *  for the given data and data length.
++ *  The initial value 0xFF must be set outside this function. The resulting
++ *  CRC value is stored in *crc.
++ *  @param data [in] Pointer to the start of data for CRC calculation.
++ *  @param len [in] Length of the data for CRC calculation.
++ *  @param crc [in,out] Pointer to the initial CRC value. This value is updated
++ *                      during the CRC calculation.
++ */
++uint crc_8bit(const uchar* const data, const uint len);
++
++/**
++ *  Calculate the 32-bit CRC using the polynomial 1 + x + x^2 + x^4 + x^5
++ *  + x^7 + x^8 + x^10 + x^11 + x^12 + x^16 + x^22 + x^23 + x^26 + x^32
++ *  for the given data and data length.
++ *  The initial value 0xFFFFFFFF must be set outside this function. The
++ *  resulting CRC value is stored in *crc.
++ *  @param p_data [in] Pointer to the start of data for CRC calculation
++ *  @param len [in] Length of the data for CRC calculation
++ *  @param crc [in,out] Pointer to the initial CRC value. This value is updated
++ *                      during the CRC calculation.
++ */
++uint crc_32bit(const uchar* const data, const uint len);
++
++
++#endif /* CRC_H */
++
+--- liblivemedia-2011.12.23.orig/liveMedia/include/MultiFramedRTPSource.hh
++++ liblivemedia-2011.12.23/liveMedia/include/MultiFramedRTPSource.hh
+@@ -115,8 +115,8 @@ public:
+   Boolean rtpMarkerBit() const { return fRTPMarkerBit; }
+   Boolean& isFirstPacket() { return fIsFirstPacket; }
+ 
+-protected:
+   virtual void reset();
++protected:
+   virtual unsigned nextEnclosedFrameSize(unsigned char*& framePtr,
+ 					 unsigned dataSize);
+       // The above function has been deprecated.  Instead, new subclasses should use:
+--- /dev/null
++++ liblivemedia-2011.12.23/liveMedia/include/NCRTPSource.hh
+@@ -0,0 +1,738 @@
++#ifndef __NC_RTP_SOURCE_HH__
++#define __NC_RTP_SOURCE_HH__
++
++
++#include <cassert>
++#include <memory.h>
++#include <cstdio>
++#include <deque>
++//#include <unordered_set>
++#include <forward_list>
++#include <thread>
++
++#include <kodo/rlnc/on_the_fly_codes.hpp>
++#include <kodo/rlnc/full_vector_codes.hpp>
++#include <kodo/rs/reed_solomon_codes.hpp>
++#include <kodo/rlnc/sliding_window_encoder.hpp>
++#include <kodo/rlnc/sliding_window_decoder.hpp>
++#include <crc.hh>
++
++#include <boost/date_time/posix_time/posix_time.hpp>
++
++#include "RTSPClient.hh"
++#include "RTPSource.hh"
++
++RTSPClient *g_pRtspClient;
++
++namespace codelance
++{
++#define IN_ORDER_DELIVERY
++#define RS//FULL_NC//ONLINE_NC//SW_NC
++#ifdef ONLINE_NC
++    typedef kodo::on_the_fly_decoder<fifi::binary8> rlnc_decoder_t;
++#endif
++#ifdef FULL_NC
++    typedef kodo::full_rlnc_decoder<fifi::binary8> rlnc_decoder_t;
++#endif
++#ifdef RS 
++    typedef kodo::rs_decoder<fifi::binary8> rlnc_decoder_t;
++#endif
++#ifdef SW_NC
++    typedef kodo::sliding_window_decoder<fifi::binary8> rlnc_decoder_t;
++#endif
++	typedef std::vector<uint8_t> packet_t;  //payload_t;
++    typedef std::deque<packet_t*> packets_t;
++    typedef std::pair<packet_t, std::mutex> sharedPacket_t;
++
++    const uint32_t g_symbols     = 32;//16U;
++    const uint32_t g_symbolSize  = 1300;//12U;
++
++    rlnc_decoder_t::factory g_decoderFactory(g_symbols, g_symbolSize);   // Decoder factory
++
++    static void write_packet_dumpx(const unsigned char *buf, unsigned short len)
++    {
++        if (buf != NULL && len != 0) {
++            int i;
++
++		    for (i = 0; i < len; i += 8) {
++                int j;
++
++                printf("%04x ", i);
++                for (j = 0; j < 8 && (i + j) < len; j++) {
++                    printf("%02x ", buf[i + j]);
++                }
++                printf("\n");
++            }
++	    printf("\n");
++        }
++    } /* write_packet_dumpx */
++
++    //class NC
++    //{
++    //public:
++    //RTSPClient *g_pRtspClient;
++    //}; /* NC */
++
++    class NCDecoder// : public NC
++    {
++    public:
++        NCDecoder(size_t id)
++            : Id(id), /*symbols(symbols), symbolSize(symbolSize),*/
++              //accessedIndex(-1L),
++              //pDecoderFactory(new rlnc_decoder_t::factory(g_symbols, g_symbolSize)),
++              pDecoder(g_decoderFactory.build()), decodedIndex(0U),
++              isOver(false), packetsReceived(0U)
++  			  //decodedSymbols(std::vector<bool>(g_symbols, false))
++        {
++			for (int i = g_symbols - 1; i >= 0; --i)
++			{
++				this->decodedSymbols.push_front(i);
++			}
++
++			/*printf("sy: %d\n", this->decodedSymbols.empty() ? 1 : 0);
++			for (auto x : this->decodedSymbols)
++            {
++				printf("%d\n", x);
++			}*/
++        } /* NCDecoder */
++
++        virtual ~NCDecoder()
++        {
++            //delete this->pDecoder;
++            //delete this->pDecoderFactory;
++        } /* ~NCDecoder */
++
++        void Decode(/*sharedPacket_t *pkt*//*unsigned char* pBuf, size_t bufSz*/ packet_t *pkt)
++        {
++            //write_packet_dumpx(&((*pkt)[0]), pkt->size());
++            //uint8_t *symbol_id = (&((*pkt)[0])) + g_symbolSize;
++            //write_packet_dumpx(symbol_id, 20);
++            //printf("%0x\n", (size_t)(*symbol_id));
++
++            //pkt->second.lock();
++            //this->pDecoder->decode(&(pkt->first[0]));
++            //this->pDecoder->decode(pBuf);
++            //printf("decode...\n");
++            this->pDecoder->decode(&((*pkt)[0]));
++            //printf("decode2...\n");
++            //pkt->second.unlock();
++
++            ++this->packetsReceived;
++        } /* Decode */
++
++        bool Next(packet_t **ppPacketOut)
++        {
++            //printf("id: %d:= decoded index+1: %d < %d rank\n", (int)this->Id, (int)this->decodedIndex+1, (int)this->pDecoder->rank());
++	        
++
++	        // try to decode
++	        //while 
++            //if (this->decodedIndex + 1 < this->pDecoder->rank()/*this->symbols - 1*/)
++	        //{
++#ifdef IN_ORDER_DELIVERY
++				if (this->decodedIndex >= g_symbols)
++			    {
++		            this->isOver = true;
++				    return false;
++			    }
++				else
++				{
++                    if (this->pDecoder->is_symbol_decoded(this->decodedIndex))
++                        //this->pDecoder->is_symbol_initialized(this->decodedIndex))
++                    {
++					    *ppPacketOut = new packet_t(g_symbolSize);
++					    this->pDecoder->copy_symbol(this->decodedIndex,
++	                        sak::storage(**ppPacketOut));
++                        size_t sz = (((**ppPacketOut)[0] & 0x0f) << 8) + (**ppPacketOut)[1];
++                        //unsigned char crcRead = (((unsigned char)(**ppPacketOut)[0]) & 0x70) >> 4;
++                        //auto crcCalced = crc_3bit(&(**ppPacketOut)[2], sz);
++                        //printf("%0x : %0x\n", crcRead, crcCalced);
++                        // crc //marker valid
++					    if ( (((**ppPacketOut)[0] & 0xf0) == 0xf0)
++                            //crcRead != crcCalced
++                            // valid dequence number
++                            && ( ((**ppPacketOut)[4] << 8) + (**ppPacketOut)[5] ) == 0 )
++	                    {
++                            write_packet_dumpx(&(**ppPacketOut)[0], (*ppPacketOut)->size());
++	                        return false;
++	                    }
++					    else
++					    {
++						    ++this->decodedIndex;
++                            (*ppPacketOut)->resize(sz + 2);
++                            (*ppPacketOut)->erase((*ppPacketOut)->begin(), (*ppPacketOut)->begin() + 2);
++                            //write_packet_dumpx(&(**ppPacketOut)[0], (*ppPacketOut)->size());
++						    return true;
++					    }
++                    }
++				}
++#else
++				if (this->decodedSymbols.empty()/*this->decodedIndex + 1 >= g_symbols*/)
++			    {
++				    //printf("Next: Decoding is complete for %d!\n", (int)this->Id);
++		            this->isOver = true;
++				    return false;
++			    }
++
++            	*ppPacketOut = new packet_t(g_symbolSize);
++
++                for (auto x : this->decodedSymbols)
++                {
++					//printf("%d\n", x);
++                    //printf("copy..\n");
++		            this->pDecoder->copy_symbol(x/*this->decodedIndex + 1*/,
++	                    sak::storage(**ppPacketOut));
++	                if ( ( ((**ppPacketOut)[2] << 8) + (**ppPacketOut)[3] ) == 0 )
++	                {
++	                    //write_packet_dumpx(&(**ppPacketOut)[0], (*ppPacketOut)->size());
++	                    //return false;
++	                    continue;
++	                }
++	                else
++	                {
++						//this->decodedSymbols[i] = true;
++						this->decodedSymbols.remove(x);
++	                    return true;
++	                }
++                    //printf("copy2..\n");
++                }
++#endif
++                //++this->decodedIndex;
++	        //}
++            //else
++            //{
++                return false;
++            //}
++
++            /*printf("---%d >= %d\n", *pBufSzInOut, this->symbolSize);
++            assert((*pBufSzInOut) >= this->symbolSize);*/
++
++            //std::vector<uint8_t> data_out(this->symbolSize);
++            /*printf("rank: %d\n", this->pDecoder->rank());*/
++
++            //this->pDecoder->copy_symbol(this->pDecoder->rank()/* - 1*/, sak::storage(data_out));    
++        } /* Next */
++
++        size_t Rank()
++        {
++            return this->pDecoder->rank();
++        } /* Rank */
++
++        float Completeness()
++        {
++            return this->packetsReceived / static_cast<float>(g_symbols);
++        } /* Completeness */
++
++        size_t PacketsLeft()
++        {
++            return g_symbols - this->packetsReceived;
++        } /* PacketsLeft */
++
++        bool IsOver()
++        {
++            return this->isOver;
++        } /* IsOver */
++
++        void setOver(bool over)
++        {
++            this->isOver = over;
++        } /* setOver */
++
++        void Feedback(unsigned char *fb)
++        {
++#ifdef SW_NC
++            this->pDecoder->write_feedback(fb);
++#endif
++        } /* Feedback */
++
++        const size_t Id;
++
++    private:
++        void reset()
++        {
++            //printf("New access context started for %d!\n", (int)this->Id);
++            //this->pDecoder = this->pDecoderFactory->build();
++	        this->decodedIndex = -1;
++	        //this->accessedIndex = -1;
++        } /* reset */
++
++   		//uint32_t symbols;       // Number of symbols used for the generation
++		//uint32_t symbolSize;    // The memory size of the symbols
++		
++		//static const rlnc_decoder_t::factory /**pD*/decoderFactory(g_symbols, g_symbolSize);   // Decoder factory
++        rlnc_decoder_t::pointer pDecoder;           // Decoder instance
++
++		long 	decodedIndex;
++		//long accessedIndex;
++
++        bool isOver;
++
++        size_t packetsReceived;
++		std::forward_list<size_t> decodedSymbols;
++    }; /* NCDecoder */
++
++    class NCRTPSource// : public NC
++    {
++    public:
++        /* Constructor */
++        NCRTPSource(/*RTSPClient *pRtspClient*/);
++
++        /* Destructor */
++        ~NCRTPSource();
++
++        /* Adds a new symbol to the decoder. */
++        void PushCode(unsigned char* pBuf, size_t bufSz);
++
++        /* Returns a pointer to an decoded packet */
++        bool PopPacket(unsigned char* pBufOut, size_t *pBufSzInOut);
++
++#define CLEAN_UP(self, timer)                                                           \
++    if ((timer % codelance::NCRTPSource::CLEAN_INTERVAL) == 0U)                         \
++    {                                                                                   \
++        try                                                                             \
++        {                                                                               \
++            /*threads.push_back(std::thread(&NCRTPSource::cleanUp, this));*/            \
++            self->CleanUp();                                                            \
++        }                                                                               \
++        catch (std::system_error &ex)                                                   \
++        {                                                                               \
++            std::cout << "Exception caught when branching: " << ex.what() << std::endl; \
++        }                                                                               \
++        catch (...)                                                                     \
++        {                                                                               \
++            std::cout << "Exception caught when branching..." << std::endl;             \
++        }                                                                               \
++    }
++
++        static const size_t CLEAN_INTERVAL      = 128;
++        static const size_t REFRESH_INTERVAL    = 70;
++        void CleanUp();
++
++    private:
++		//int next();
++        //void reset(size_t id);
++        NCDecoder* getDecoder(size_t id);
++        NCDecoder* getDecoderIfExists(size_t id);
++
++        void doDecode(size_t id, packet_t pkt/*unsigned char *pBuf, size_t bufSz*/);
++
++        size_t timer;
++
++        size_t currentId;
++
++        //RTSPClient *pRtspClient;
++
++		//uint32_t symbols;       // Number of symbols used for the generation
++		//uint32_t symbolSize;    // The memory size of the symbols
++        
++        //typedef std::/*vector*/unordered_set<NCDecoder*> decoders_t;
++        typedef std::list<NCDecoder*> decoders_t;        
++		decoders_t decoders;
++
++		//typedef std::pair<packet_t, bool> packet_t;
++        std::mutex packetsMutex;
++		packets_t packets;
++
++        std::mutex decoderMutex;
++        std::vector<std::thread> threads;
++
++        FILE *pDump;
++
++        //sharedPacket_t saved;
++    }; /* NCRTPSource */
++} /* codelance */
++
++/* Inline definitions ------------------------------------------------------- */
++
++inline codelance::NCRTPSource::NCRTPSource(/*RTSPClient *pRtspClient*//*uint32_t symbols, uint32_t symbolSize*/)
++    :   /*pRtspClient(pRtspClient),*/ timer(0U), currentId(0U), /*symbols(symbols), symbolSize(symbolSize),*/
++        //pDecoderFactory(new rlnc_decoder_t::factory(symbols, symbolSize)), 
++        //pDecoder(this->pDecoderFactory->build()),
++        //matId(0U), decodedIndex(-1), accessedIndex(-1)
++        pDump(fopen("decoding.csv", "w"))
++{
++	/*for (size_t i = 0; i < g_symbols; ++i)
++	{
++		this->packets.push_back(packet_t(g_symbolSize));
++	}*/
++} /* NCRTPSource */
++
++inline codelance::NCRTPSource::~NCRTPSource()
++{
++    fclose(this->pDump);
++} /* ~NCRTPSource */
++
++inline void codelance::NCRTPSource::PushCode(unsigned char *pBuf, size_t bufSz)
++{
++    assert(pBuf != NULL);
++
++//#ifdef RS_CODING
++//    const size_t OVERHEAD_OFFSET = 8U;
++//#else
++    const size_t OVERHEAD_OFFSET = 4U;
++//#endif
++
++    try
++    {
++        for(auto &thread : this->threads)
++        {
++            thread.join();
++        }
++        this->threads.clear();
++    }
++    catch (std::system_error &ex)
++    {
++        std::cout << "Exception caught when joining: " << ex.what() << std::endl;
++    }
++    catch (...)
++    {
++        std::cout << "Exception caught when joining..." << std::endl;
++    }
++
++    size_t id = 0U;
++    id = (pBuf[0] << 24) + (pBuf[1] << 16) + (pBuf[2] << 8) + pBuf[3];
++
++    this->currentId = this->currentId < id ? id : this->currentId;
++
++    //write_packet_dumpx(pBuf, bufSz);
++
++    /* reset encoder if complete */
++#if 0
++    if(id != this->matId/*this->pDecoder->rank() >= this->symbols*/)
++    {
++        this->next();
++        printf("PushCode: Decoding is complete!\n");
++		this->reset(id);
++    }
++#endif
++    //printf("PushCode:\n");
++    //this->cleanUpMutex.lock();
++    //auto d = this->getDecoder(id);
++    // if new decoder
++
++//printf("push1\n");
++    threads.push_back(std::thread(&NCRTPSource::doDecode,
++        this, id, packet_t(pBuf + OVERHEAD_OFFSET, 
++        pBuf + OVERHEAD_OFFSET + (bufSz - OVERHEAD_OFFSET))/*pBuf + 4, bufSz - 4*/));
++} /* PushCode */
++
++inline void codelance::NCRTPSource::doDecode(size_t id, packet_t pkt/*unsigned char *pBuf, size_t bufSz*/)
++{
++    {
++        std::lock_guard<std::mutex> guard(this->decoderMutex);
++
++        //assert(pBuf);k7161
++    //printf("do1\n");
++        //this->saved.second.lock();
++        //this->saved.first = packet_t(pBuf + 4, pBuf + (bufSz - 4));
++        //this->saved.second.unlock();
++
++        auto d = this->getDecoder(id);
++        static const size_t REPEAT_COND = g_symbols - (size_t)(3.0f * g_symbols / 4.0f);
++//#ifndef SW_NC
++        NCDecoder *d2 = this->getDecoderIfExists(id - 1);
++        if (d2 && ((d->Rank() % 10) == 0) //&& (!(d2 = this->getDecoder(id - 1))->IsOver())
++            && ( (g_symbols - d2->Rank()) < REPEAT_COND ) 
++            && (g_symbols - d2->Rank() > 0))
++        {
++            //printf("%u < %d\n", g_symbols - d2->Rank(), REPEAT_COND);
++            g_pRtspClient->sendNCFeedbackCommand(id, g_symbols - d2->Rank(), 0);
++        }
++//#endif
++
++    //printf("do2\n");
++        d->Decode(&pkt/*pBuf, bufSz*/);
++
++        //threads.push_back(std::thread(&codelance::NCDecoder::Decode,
++        //    d, &(this->saved)));
++    //printf("do3\n");
++        packet_t *pPkt = NULL;
++        for (auto x : this->decoders)
++        {
++	        while (x->Next(&pPkt))
++            {
++                assert(pPkt);
++                /*if ( (((*pPkt)[2] << 8) + (*pPkt)[3]) == 0 )
++                {
++                    break;
++                }*/
++
++                this->packetsMutex.lock();
++    //printf("do4\n");
++                this->packets.push_back(pPkt);
++                this->packetsMutex.unlock();
++                //printf("push:\n");
++                //write_packet_dumpx(&(*pPkt)[0], pPkt->size());
++
++                boost::posix_time::ptime now = 
++                    boost::posix_time::microsec_clock::local_time();
++                boost::posix_time::time_duration td = now.time_of_day();
++    //printf("do5\n");
++                //threads.push_back(std::thread(&fprintf, this->pDump, "%u;%u;%lld\n",
++                //    x->Id, ((*pPkt)[2] << 8) + (*pPkt)[3], td.total_milliseconds()));
++                /*if ( (((*pPkt)[2] << 8) + (*pPkt)[3]) != 0 )
++                {*/
++                    fprintf(this->pDump, "%lu;%u;%ld\n",
++                        x->Id, ((*pPkt)[2] << 8) + (*pPkt)[3], td.total_milliseconds());
++                    //usleep(3000);
++                /*}
++                else
++                {
++                    write_packet_dumpx(&(*pPkt)[0], pPkt->size());
++                }*/
++
++#ifdef SW_NC
++                static std::vector<uint8_t> fb(100U);
++                d->Feedback(&fb[0]);
++                g_pRtspClient->sendNCFeedbackCommand(id, &fb, 0);
++#endif
++            }
++        }
++    } // packets mutex
++
++    // clean up if needed
++#if 0
++    try
++    {
++//printf("do6\n");
++        //threads.push_back(std::thread(&NCRTPSource::cleanUp, this));
++        this->cleanUp();
++    }
++    catch (std::system_error &ex)
++    {
++        std::cout << "Exception caught when branching: " << ex.what() << std::endl;
++    }
++    catch (...)
++    {
++        std::cout << "Exception caught when branching..." << std::endl;
++    }
++#endif
++    /*if (d->IsOver())
++    {
++        printf("Deallocating decoder %d!\n", id);
++        this->decoders.erase(d*this->decoders.begin() + id*);
++    }*/
++} /* doDecode */
++
++inline bool codelance::NCRTPSource::PopPacket(unsigned char* pBufOut, size_t *pBufSzInOut)
++{
++    std::lock_guard<std::mutex> guard(this->packetsMutex);
++//printf("pop1\n");
++    if (this->packets.size() == 0)
++    {
++        //memset()
++        return false;
++    }
++
++    //printf("%lu\n", this->decoders.size());
++//printf("pop2\n");
++    memcpy(pBufOut, &(*this->packets.front())
++        // first packet hack!!
++        [0/*this->accessedIndex == 0 ? 4 : 0*/], 
++		this->packets.front()->size());
++//printf("pop3\n");  
++
++    // find real end of packet
++    *pBufSzInOut = this->packets.front()->size();
++    /*for (size_t i = this->packets.front()->size() - 1; i >= 3U; --i)
++    {
++        if (pBufOut[i] == 0x02)
++        {
++            if (pBufOut[i - 1] + pBufOut[i - 2] + pBufOut[i - 3] == 0x00)
++            {
++                *pBufSzInOut = i - 3;
++                break;
++            }
++        }
++    }*/
++//printf("pop4\n");
++    this->packets.pop_front();
++//printf("pop5\n");
++	//printf("PopPacket:\n");
++	//write_packet_dumpx(pBufOut, *pBufSzInOut);
++
++    return true;
++
++#if 0
++	if (this->decodedIndex > this->accessedIndex)
++	{
++        ++this->accessedIndex;
++		memcpy(pBufOut, &(this->packets[this->accessedIndex])
++            // first packet hack!!
++            [0/*this->accessedIndex == 0 ? 4 : 0*/], 
++			this->packets[this->accessedIndex].size());
++	    *pBufSzInOut = this->packets[this->accessedIndex].size();
++		printf("PopPacket:\n");
++		write_packet_dumpx(pBufOut, *pBufSzInOut);
++
++        /* context is fully decoded */		
++		if (this->accessedIndex == this->symbols - 1)
++		{
++			printf("PopPacket: Decoding is complete!\n");
++		}
++	}
++	else
++	{
++		printf("No new decoded packets available!\n");
++	}
++#endif
++
++#if 0
++    printf("pop1\n");
++
++    printf("--sym %d sz %d\n", this->symbolSize, data_out.size());
++    write_packet_dumpx(&data_out[0], data_out.size());
++    memcpy(pBufOut, &data_out[0], data_out.size());
++    *pBufSzInOut = data_out.size();
++    //write_packet_dumpx(pBufOut, data_out.size());
++    printf("pop2\n");
++#endif
++} /* PopPacket */
++
++inline codelance::NCDecoder* codelance::NCRTPSource::getDecoder(size_t id)
++{
++    static NCDecoder *pLast = nullptr;
++    if (pLast && (pLast->Id == id))
++    {
++        return pLast;
++    }
++    else
++    {
++        for(auto d : this->decoders)
++        {
++            if (d->Id == id)
++            {
++                pLast = d;
++                return d;
++            }
++        }
++        // otherwise create new decoder
++        auto p = new NCDecoder(id);
++        //this->decoders.insert/*push_back*/(p);
++        this->decoders.push_back(p);
++        return p/*this->decoders.back()*/;
++    }
++} /* getDecoder */
++
++inline codelance::NCDecoder* codelance::NCRTPSource::getDecoderIfExists(size_t id)
++{
++    static NCDecoder *pLast = nullptr;
++    if (pLast && (pLast->Id == id))
++    {
++        return pLast;
++    }
++    else
++    {
++        for(auto d : this->decoders)
++        {
++            if (d->Id == id)
++            {
++                pLast = d;
++                return d;
++            }
++        }
++        return nullptr;
++    }
++} /* getDecoderIfExists */
++
++inline void codelance::NCRTPSource::CleanUp()
++{
++//printf("cle1\n");
++    std::lock_guard<std::mutex> guard(this->decoderMutex);
++    //++this->timer;
++
++    //printf("timer: %lu\n", this->timer);
++    // clean up
++//printf("cle2\n");
++    //if ((this->timer % NCRTPSource::CLEAN_INTERVAL) == 0U)
++    {
++//printf("cle3\n");
++        //printf("Total cleanup!\n");
++        // big cleanup
++        if (this->decoders.size() > g_symbols / 2)
++        {
++            this->decoders.remove_if
++            (
++                [this](NCDecoder *d) 
++                {
++                    assert(this);
++                    return ((d->Id != this->currentId)/* && (this->decoders.size() > 1)*/);
++                }
++            );
++//printf("e1\n");
++            // only the last is left
++#if 0
++            size_t id = 0;
++            for (auto d : this->decoders)
++            {
++                if (d->Id > id)
++                {
++//printf("e2\n");
++                    id = d->Id;
++                }
++            }
++#endif
++#if 0
++            for (auto d : this->decoders)
++            {
++                if (d->Id != this->currentId)
++                {
++//printf("e3\n");
++                    //printf("Deallocating %scomplete decoder %lu!\n", 
++                    //    d->IsOver() ? "" : "un", d->Id);
++                    d->setOver(true);
++                    this->decoders.erase(d);
++                }
++            }
++#endif
++        }
++    }
++    // refresh
++// comment back
++#if 0
++    else if ((this->timer % NCRTPSource::REFRESH_INTERVAL) == 0U)
++    {
++//printf("cle4\n");
++        //printf("Refresh!\n");
++        for (auto d : this->decoders)
++        {
++            if (d->Id != this->currentId && !d->IsOver()
++                && (d->PacketsLeft() < g_symbols / 3))
++                //&& !d->IsOver() && d->Rank() > (2 * g_symbols / 3))
++            {
++                //g_pRtspClient->sendNCFeedbackCommand(d->Id, 
++                //    d->PacketsLeft()/*g_symbols - d->Rank()*/, 0);
++            }
++        }
++    }
++#endif 
++#if 0
++    else
++    {
++        //printf("Cleanup!\n");
++        // do clean
++        size_t i = 0;
++        // 80% to delete
++        const float PERCENT = 0.8f;
++        const size_t toDelete = static_cast<size_t>(this->decoders.size() * PERCENT);
++        for(auto d : this->decoders)
++        {
++            if (d->IsOver())
++            {
++                printf("Deallocating complete decoder %lu!\n", d->Id);
++                this->decoders.erase(d);
++                // don't delete too much
++                if (++i >= toDelete)
++                {
++                    break;
++                }
++            }
++        }
++    }
++#endif
++//printf("cle5\n");
++} /* cleanUp */
++
++
++#endif /* __NC_RTP_SOURCE_HH__ */
++

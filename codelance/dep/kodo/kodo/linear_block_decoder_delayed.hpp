@@ -1,0 +1,164 @@
+// Copyright Steinwurf ApS 2011-2012.
+// Distributed under the "STEINWURF RESEARCH LICENSE 1.0".
+// See accompanying file LICENSE.rst or
+// http://www.steinwurf.com/licensing
+
+#pragma once
+
+#include <cstdint>
+
+#include <boost/optional.hpp>
+
+#include <fifi/fifi_utils.hpp>
+#include <fifi/is_binary.hpp>
+
+namespace kodo
+{
+
+    /// @ingroup decoder_layers
+    /// @brief Linear block decoder with delayer backwards substitution.
+    ///
+    /// The delayed backwards substitution can reduce the fill-in
+    /// effect and can therefore improve the decoding throughput when
+    /// decoding sparse symbols, in particular if the generation size
+    /// is large.
+    template<class SuperCoder>
+    class linear_block_decoder_delayed : public SuperCoder
+    {
+    public:
+
+        /// The field we use
+        typedef typename SuperCoder::field_type field_type;
+
+        /// The value_type used to store the field elements
+        typedef typename field_type::value_type value_type;
+
+        /// Access the direction policy used by the underlying decoder
+        typedef typename SuperCoder::direction_policy direction_policy;
+
+    public:
+
+        /// @copydoc layer::decode_symbol(uint8_t*,uint8_t*)
+        void decode_symbol(uint8_t *symbol_data, uint8_t *coefficients)
+        {
+            assert(symbol_data != 0);
+            assert(coefficients != 0);
+
+            value_type *s =
+                reinterpret_cast<value_type*>(symbol_data);
+
+            value_type *c =
+                reinterpret_cast<value_type*>(coefficients);
+
+            decode_coefficients(s, c);
+        }
+
+        /// @copydoc layer::decode_symbol(uint8_t*,uint32_t)
+        void decode_symbol(uint8_t *symbol_data, uint32_t symbol_index)
+        {
+            assert(symbol_index < SuperCoder::symbols());
+            assert(symbol_data != 0);
+
+            if(SuperCoder::is_symbol_decoded(symbol_index))
+                return;
+
+            const value_type *symbol =
+                reinterpret_cast<const value_type*>( symbol_data );
+
+            if(SuperCoder::is_symbol_seen(symbol_index))
+            {
+                SuperCoder::swap_decode(symbol, symbol_index);
+            }
+            else
+            {
+                // Stores the symbol and updates the corresponding
+                // encoding vector
+                SuperCoder::store_uncoded_symbol(symbol, symbol_index);
+
+                m_maximum_pivot =
+                    direction_policy::max(symbol_index, m_maximum_pivot);
+
+            }
+
+            if(SuperCoder::is_complete())
+            {
+                final_backward_substitute();
+                SuperCoder::update_symbol_status();
+            }
+
+        }
+
+    protected:
+
+        // Fetch the variables needed
+        using SuperCoder::m_maximum_pivot;
+
+    protected:
+
+        /// Performs the forward substitution, but waits with the final
+        /// backwards substitution until full rank is achieved.
+        /// @param symbol_data The buffer of the encoded symbol
+        /// @param coefficients The coding coefficients used to encode the
+        ///        symbol
+        void decode_coefficients(value_type *symbol_data,
+                                 value_type *coefficients)
+        {
+            assert(symbol_data != 0);
+            assert(coefficients != 0);
+
+            // See if we can find a pivot
+            boost::optional<uint32_t> pivot_index =
+                SuperCoder::forward_substitute_to_pivot(
+                    symbol_data, coefficients);
+
+            if(!pivot_index)
+                return;
+
+            if(!fifi::is_binary<field_type>::value)
+            {
+                // Normalize symbol and vector
+                SuperCoder::normalize(
+                    symbol_data, coefficients, *pivot_index);
+            }
+
+            // Now save the received symbol
+            SuperCoder::store_coded_symbol(
+                symbol_data, coefficients,*pivot_index);
+
+
+            m_maximum_pivot =
+                direction_policy::max(*pivot_index, m_maximum_pivot);
+
+            if(SuperCoder::is_complete())
+            {
+                final_backward_substitute();
+                SuperCoder::update_symbol_status();
+            }
+        }
+
+    protected:
+
+        /// Performs the final backward substitution that transform the
+        /// coding matrix from echelon form to reduce echelon form and
+        /// hence fully decode the generation
+        void final_backward_substitute()
+        {
+            assert(SuperCoder::is_complete());
+
+            uint32_t start = direction_policy::min(0, SuperCoder::symbols()-1);
+            uint32_t end = direction_policy::max(0, SuperCoder::symbols()-1);
+
+            for(direction_policy p(start, end); !p.at_end(); p.advance())
+            {
+                uint32_t i = p.index();
+
+                value_type *symbol_i = SuperCoder::symbol_value(i);
+                value_type *vector_i = SuperCoder::coefficient_vector_values(i);
+
+                SuperCoder::backward_substitute(symbol_i, vector_i, i);
+            }
+        }
+    };
+}
+
+

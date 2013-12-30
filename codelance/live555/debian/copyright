@@ -1,0 +1,28 @@
+This package was initially debianized by Sam Hocevar <sam@zoy.org> on
+Mon,  9 Feb 2004 22:31:50 +0100.
+
+This package is maintained since 2008 by Christophe Mutricy
+<xtophe@videolan.org>
+
+It was downloaded from http://www.live555.com/liveMedia/public/
+
+Upstream Authors: Live Networks, Inc. <http://www.live.com/>
+
+Copyright (c) 1996-2011 Live Networks, Inc.  All rights reserved.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+
+On Debian GNU/Linux systems, the complete text of the GNU Lesser General
+Public License can be found in `/usr/share/common-licenses/LGPL-2.1'.

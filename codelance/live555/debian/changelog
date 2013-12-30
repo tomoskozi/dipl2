@@ -1,0 +1,335 @@
+liblivemedia (2011.12.23-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release (Closes: #652661).
+  * Refresh patches and drop patches that are applied upstream in a similar way.
+  * Pull latest upstream changelog.
+  * We don't carry any GPL'd patches any more. The package license is back
+    to LGPL.
+  * Add build-arch and build-indep targets to make lintian happy.
+
+ -- Benjamin Drung <bdrung@debian.org>  Fri, 30 Dec 2011 14:49:20 +0100
+
+liblivemedia (2011.09.02-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release:
+    - Updated "MultiFramedRTPSource" to more cleanly handle the situation
+      where the sender's SSRC changes.
+  * Force close-on-exec flag (Closes: #639007), patch by Rémi Denis-Courmont.
+  * Refresh patches.
+
+ -- Alessio Treglia <alessio@debian.org>  Sun, 04 Sep 2011 11:51:51 +0200
+
+liblivemedia (2011.08.22-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release::
+    - Updated the "RTSPServer" code to handle a rare condition whereby
+      handleRequestBytes() gets called recursively. This can happen only
+      when we handle a "DESCRIBE" by re-calling the event loop (e.g., to
+      wait for SDP parameters to become available).)  If this happens,
+      we need to make sure that we don't delete the "RTSPClientSession"
+      object until we leave the outermost call.
+
+ -- Alessio Treglia <alessio@debian.org>  Fri, 26 Aug 2011 17:17:25 +0200
+
+liblivemedia (2011.07.21-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release:
+    - Changed some member variables from "private:" to "protected:",
+      to make subclassing easier.
+    - Added a sanity check to the "RTP-over-TCP" handling code in
+      "RTPInterface.cpp" to alleviate a strange condition (perhaps a bug).
+
+ -- Alessio Treglia <alessio@debian.org>  Tue, 26 Jul 2011 10:42:46 +0200
+
+liblivemedia (2011.07.08-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release:
+    - Updated the RTSP server implementation to check the "Content-Length:"
+      header (if present) in incoming requests. Most commands don't include
+      extra data after the <CR><LF><CR><LF>, and thus don't need a
+      "Content-Length:" header.  However, two commands (GET_PARAMETER and
+      SET_PARAMETER) include extra data, and thus have a "Content-Length:"
+      header. We now check this value, to make sure that we've received all
+      of the required data for each request.
+
+ -- Alessio Treglia <alessio@debian.org>  Mon, 11 Jul 2011 15:49:16 +0200
+
+liblivemedia (2011.06.16-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release:
+    - Updated "AC3AudioRTPSink" and "AC3AudioRTPSource" to conform to RFC4184,
+      which defines the RTP payload format for AC-3 audio. Previously, we were
+      using a different, incompatible payload format (that had been defined by
+      an initial draft document, but which differed from that defined in the
+      final RFC.  Unfortunately, this means that older clients that use our
+      code - including existing binary versions of VLC and MPlayer - will no
+      longer be able to play AC-3/RTP streams from our server (until they are
+      rebuilt using this newest version of our library).
+    - Updated "AC3AudioStreamFramer" - and added a new class
+      "AC3AudioFileServerMediaSubsession" - to support streaming from an AC-3
+      audio file. We also added this support to the "testOnDemandRTSPServer"
+      demo application, and to the "LIVE555 Media Server" (currently just the
+      source code; not the prebuilt binary versions).
+    - Moved the definition of "class StreamState" from
+      OnDemandServerMediaSubsession.cpp to OnDemandServerMediaSubsession.hh.
+      Even though "class StreamState" is used only internally, in the
+      implementation of "OnDemandServerMediaSubsession", moving its definition
+      to the header file makes it possible for subclasses of
+      "OnDemandServerMediaSubsession" to access it.
+
+ -- Alessio Treglia <alessio@debian.org>  Tue, 21 Jun 2011 11:42:15 +0200
+
+liblivemedia (2011.05.25-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream bugfix release:
+    - Fix a bug in "RTSPClient" which was causing clients to crash if
+      servers returned a 401 error code, but without a "WWW-Authenticate:"
+      header.
+
+ -- Alessio Treglia <alessio@debian.org>  Thu, 26 May 2011 13:00:25 +0200
+
+liblivemedia (2011.03.14-1) unstable; urgency=low
+
+  * Team upload.
+  * Upload to unstable.
+
+  [ Benjamin Drung ]
+  * Revert "A bit of style: wrap lines and fix indentation."
+
+  [ Alessio Treglia ]
+  * New upstream release.
+  * Update upstream ChangeLog.
+  * Fix small typo in debian/rules.
+  * debian/copyright: Update copyright years.
+  * Bump Standards.
+  * Refresh 022_safe_setlocale.diff patch.
+
+ -- Alessio Treglia <alessio@debian.org>  Sun, 24 Apr 2011 10:56:23 +0200
+
+liblivemedia (2010.11.17-1) experimental; urgency=low
+
+  [ Christophe Mutricy ]
+  * New upstream version 2010.11.17
+  * Refresh patches
+  * Update upstream ChangeLog
+  * Set policy to 3.9.1
+  * Upload to experimental until Squeeze is released
+
+  [ Benjamin Drung ]
+  * Refresh patches.
+  * Switch to dpkg-source 3.0 (quilt) format.
+
+  [ Alessio Treglia ]
+  * Correct team's name in the Maintainer field.
+  * debian/control: Wrap long lines and shorten indentation.
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Tue, 30 Nov 2010 22:55:53 +0100
+
+liblivemedia (2010.04.09-1) unstable; urgency=medium
+
+  * New upstream version 2010.04.09
+  * Correctly document that we use a GPL'd patch and so the package is
+    GPL'd (Closes: #578161)
+  * Explain the license change in NEWS
+  * Set urgency to medium as it closes a RC bug
+  * Refresh patches
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Thu, 22 Apr 2010 12:21:42 +0200
+
+liblivemedia (2010.02.10-1) unstable; urgency=low
+
+  * New upstream version 2010.02.10 (Closes: #565473)
+  * ip_mreq_source is defined in all glibc not just on kfreebsd. Fix
+    hurd FTBFS
+  * Add an helper in debian/rules to get upstream.changelog
+  * Refresh patch
+  * Update upstream changelog
+  * Point to LGPL-2.1 and update a little bit debian/copyright
+  * Set policy to 3.8.4 (no change needed)
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Wed, 10 Feb 2010 11:02:43 +0100
+
+liblivemedia (2009.11.27-1) unstable; urgency=low
+
+  * New upstream release (Closes: #560729, LP: #227610)
+  * Remove patches applied upstream
+  * Refresh patches
+  * Set policy to 3.8.3
+  * Move the packaging to Git
+  * Update upstream changelog
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Sat, 19 Dec 2009 12:17:36 +0100
+
+liblivemedia (2008.07.25-2) unstable; urgency=low
+
+  * rules: we need to patch before ./genMakefile 
+  * control: Xs-Vcs-  -> Vcs-
+  * add a watch file 
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Fri, 29 Aug 2008 19:49:40 +0200
+
+liblivemedia (2008.07.25-1) unstable; urgency=low
+
+  * New upstream release (Closes: #453449)
+  * Add Homepage field
+  * New patch by Remi Denis-Courmont to fix an unsafe use of setlocale()
+  * Bump up Standards-Version to 3.8.0
+  * Don't ignore make clean error
+  * Add myself as uploader
+  * Install MPEG2TransportStreamIndexer (Closes: #453511)
+  * Refresh patches and delete 020_cxx_headers.diff
+
+ -- Christophe Mutricy <xtophe@videolan.org>  Wed, 27 Aug 2008 00:40:51 +0200
+
+liblivemedia (2007.02.20-2) unstable; urgency=low
+
+  * debian/copyright:
+    + Fixed upstream URL (Closes: #386739).
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Sat, 17 Mar 2007 22:05:49 +0100
+
+liblivemedia (2007.02.20-1) unstable; urgency=low
+
+  * New upstream release (Closes: #386740).
+  * Refreshed all patches.
+
+  * debian/rules:
+    + Ship new live555MediaServer binary.
+  * debian/control:
+    + Set pkg-multimedia-maintainers as main maintainer.
+    + Added Vcs fields.
+  * debian/compat:
+    + Set compat to 5.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Fri, 16 Mar 2007 21:45:22 +0100
+
+liblivemedia (2006.07.04-2) unstable; urgency=low
+
+  * debian/control:
+    + Set policy to 3.7.2.
+
+  * 021_ip_mreq_source.diff:
+    + kFreeBSD FTBFS patch courtesy of Petr Salinger (Closes: #399679).
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Thu, 22 Feb 2007 00:59:00 +0100
+
+liblivemedia (2006.07.04-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Thu,  3 Aug 2006 18:25:42 +0200
+
+liblivemedia (2006.03.17-2) unstable; urgency=low
+
+  * Switched patch system to quilt.
+  * debian/control:
+    + Build-depend on quilt.
+
+  * 010_propagate_cflags.diff: (new patch from old diff.gz) properly
+    propagate $(CFLAGS) when entering new directories.
+
+  * 010_proper_link_order.diff: (new patch from old diff.gz) fixed order
+    of libraries in the link line.
+
+  * 010_static_link.diff: (new patch from old diff.gz) create static
+    libraries instead of a shared one.
+
+  * 020_cxx_headers.diff: (new patch from old diff.gz) fixed inclusion of
+    C headers instead of C++.
+
+  * 020_invalid_casts.diff: (new patch from old diff.gz) fixed invalid casts
+    from integer to (void *).
+
+  * 040_changelog.diff: (new patch from old diff.gz) added upstream changelog
+    to the distribution.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Thu, 30 Mar 2006 15:59:49 +0200
+
+liblivemedia (2006.03.17-1) unstable; urgency=low
+
+  * New upstream release.
+  * This release properly builds with gcc 4.1 (Closes: #356592).
+  * debian/control:
+    + Replaced occurrences of live.com to live555.com.
+  * debian/openRTSP.html:
+    + Included documentation from http://www.live555.com/openRTSP/ for
+      the openRTSP binary (Closes: #345510).
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Mon, 20 Mar 2006 10:41:50 +0100
+
+liblivemedia (2005.10.05-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/rules:
+    + Oops, fixed a bug that compiled both library versions as PIC.
+  * debian/copyright:
+    + Updated the FSF address.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Thu,  6 Oct 2005 21:42:46 +0200
+
+liblivemedia (2005.07.21-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Thu, 21 Jul 2005 16:36:47 +0200
+
+liblivemedia (2005.06.16-1) unstable; urgency=low
+
+  * New upstream snapshot.
+  * CXX transition upload.
+  * debian/control:
+    + Set policy to 3.6.2.1.
+    + New livemedia-utils package containing the compiled example tools,
+      including openRTSP (Closes: #267602, #271383). The source code for them
+      is still in liblivemedia-dev as examples.
+    + Mention "RTSP" in the short description, and tool names such as openRTSP
+      in the long description (Closes: #304255).
+  * Included upstream changelog in the package.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Fri, 15 Jul 2005 14:51:34 +0300
+
+liblivemedia (2005.04.01-1) unstable; urgency=low
+
+  * New upstream snapshot (Closes: #302319).
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Fri,  1 Apr 2005 19:00:59 +0200
+
+liblivemedia (2004.11.11a-1) unstable; urgency=low
+
+  * New upstream snapshot.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Sun, 14 Nov 2004 23:50:17 +0100
+
+liblivemedia (2004.11.02-1) unstable; urgency=low
+
+  * New upstream snapshot.
+  * debian/control:
+    + Set policy to 3.6.1.1.
+  * README.Debian:
+    + Fixed CFLAGS indications.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Tue,  2 Nov 2004 14:49:03 +0100
+
+liblivemedia (2004.04.23-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Mon, 26 Apr 2004 17:47:40 +0200
+
+liblivemedia (2004.02.09-1) unstable; urgency=low
+
+  * Initial release (Closes: #231954).
+  * liveMedia/H263plusVideoRTPSink.cpp liveMedia/MPEG1or2Demux.cpp:
+    + Removed invalid and useless int->void* casts.
+  * groupsock/Groupsock.cpp groupsock/NetInterface.cpp:
+    + Replaced <strstream.h> includes with <strstream>.
+
+ -- Sam Hocevar (Debian packages) <sam+deb@zoy.org>  Mon,  9 Feb 2004 22:31:50 +0100
+

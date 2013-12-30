@@ -1,0 +1,594 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head><script>function PrivoxyWindowOpen(){return(null);}</script>
+<Title>openRTSP</Title>
+</head>
+
+<body background="../graphics/lni_background.jpg">
+
+<TABLE>
+<TR>
+<TD>
+<img src="../logos/logo.50t.gif" width="143" ALIGN=LEFT  HEIGHT="167" ALT="Live Networks logo">
+</TD>
+<TD>
+<h1>openRTSP<sup><font size=-2>TM</font></sup></h1>
+<center><h3>A command-line
+<a HREF="http://www.rtsp.org/">RTSP</a>
+client</h3></center>
+</TD>
+</TR>
+</TABLE>
+<p>
+"openRTSP" is a command-line program that can be used to open, stream,
+receive, and (optionally) record media streams that are specified by a
+<a HREF="http://www.rtsp.org/">RTSP</a>
+URL - i.e., an URL that begins with
+<em>rtsp://</em>
+<p>
+<small>(A related program
+- "<a HREF="../playSIP/">playSIP</a>"
+- can be used to play/record a
+<em>SIP</em>
+session.)</small>
+<p>
+        <ul>
+        <li><a HREF="#basic">Basic operation</a>
+        <li><a HREF="#no-receive">Playing without receiving</a>
+        <li><a HREF="#playing-time">Playing-time options</a>
+        <li><a HREF="#access-control">Streaming access-controlled sessions</a>
+        <li><a HREF="#quicktime">Outputting a ".mov", ".mp4", or ".avi"-format file</a>
+        <li><a HREF="#other-options">Other options</a>
+        <li><a HREF="#real-media">A note about RealAudio and RealVideo sessions</a>
+        <li><a HREF="#source-code">Source code</a>
+<!--
+	<li><a HREF="#binaries">Pre-built binaries</a>
+-->
+	<li><a HREF="#support">Support and customization</a>
+	<li><a HREF="#option-summary">Summary of command-line options</a>
+        </ul>
+
+<a name="basic"></a>
+<h2>Basic operation</h2>
+
+The simplest way to run this program is:
+<pre>
+        openRTSP <em>&lt;url&gt;</em>
+</pre>
+where <em>&lt;url&gt;</em> is a RTSP URL to open
+(i.e., beginning with "rtsp://").
+The program will open the given URL (using RTSP's "DESCRIBE" command),
+retrieve the session's SDP description,
+and then, for each audio/video subsession whose RTP payload format it
+understands, "SETUP" and "PLAY" the subsession.
+<p>
+The received data for each subsession is written into a separate output
+file, named according to its MIME type.
+For example, if the session contains a MPEG-1 or 2 audio subsession
+(RTP payload type 14) - e.g., MP3 - and a MPEG-1 or 2 video
+subsession (RTP payload type 32),
+then each subsession's data
+will be extracted from the incoming RTP packets and
+written to files named "audio-MPA-1" and "video-MPV-2" (respectively).
+(You will probably then need to rename these files
+- by giving them an appropriate filename extension
+(e.g., ".mp3" and ".mpg") - in order
+to be able to play them using common media player tools.)
+<p>
+You can use the
+"<strong>-F <em>&lt;fileName-prefix&gt;</em></strong>" option to
+add a prefix to the file name that is written for each subsession.
+(This can be useful if you are running "openRTSP" several times,
+in the same directory,
+to read data from different RTSP sessions.)
+<p>
+
+<h3>Extracting a single stream (to 'stdout')</h3>
+
+To record only the audio stream from a session, use the
+"<strong>-a</strong>" command-line option.
+(Similarly, to record only the video stream, use the
+"<strong>-v</strong>" option.)
+In this case, the output audio (or video) stream will
+be written to 'stdout', rather than to a file.
+
+<h3>More verbose diagnostic output</h3>
+For more verbose diagnostic output, use the
+"<strong>-V</strong>" (upper-case) option.
+With this option, the program will print out each complete
+RTSP request and response.
+This can be useful for figuring out exactly why a "SETUP"
+or "PLAY" operation failed.
+
+<p><hr><p>
+
+<a name="no-receive"></a>
+<h2>Playing without receiving</h2>
+
+If you want the program to <em>play</em> the RTSP session,
+but not actually <em>receive</em> it, you can do so by giving the
+program the
+"<strong>-r</strong>" ('don't receive') option.
+This is useful if you have a separate application (running on the same
+host) that actually receives the incoming media session(s).
+(Note that this separate receiving application should also send back
+RTCP Reception Reports, to ensure that the session doesn't time out.)
+<p>
+If you use the "-r" option to play a unicast session,
+you'll probably also want to use the
+"<strong>-p <em>&lt;startingPortNumber&gt;</em></strong>" option.
+This option tells the program which client port numbers to use in the
+RTSP "SETUP" commands - i.e., which RTP/RTCP
+ports the server should send to.
+(Without the "-r" option, the program receives the streams itself,
+and uses its own ephemeral port numbers for this.)
+<em>&lt;startingPortNumber&gt;</em> must be an even number.
+<p>
+For example, if the RTSP session consists of an audio and a video
+subsession (listed in that order in the returned SDP description), then
+"-p 6666" will cause ports 6666 and 6667 to be used for the
+audio subsession (6666 for RTP; 6667 for RTCP),
+and ports 6668 and 6669 to be used for
+the video subsession (6668 for RTP; 6669 for RTCP).
+<p>
+(If you use the "-r" option to play a <em>multicast</em> session,
+then you probably won't also need to use the
+"-p <em>&lt;startingPortNumber&gt;</em>" option, because the SDP
+description for multicast sessions usually includes a port number to use.)
+
+<p><hr><p>
+
+<a name="playing-time"></a>
+<h2>Playing-time options</h2>
+
+If the SDP description (from the RTSP server) contains a
+"a=range:npt= ..." attribute specifying an end time, then the program
+will close down the session and exit shortly after
+(by default, 5 seconds after) this time elapses.
+<p>
+You can change this end time using the
+"<strong>-e <em>&lt;endTime&gt;</em></strong>" option.
+If
+<em>&lt;endTime&gt;</em>
+is positive, it is the total number of
+seconds to delay before closing down the session and exiting.  If
+<em>&lt;endTime&gt;</em>
+is negative, then
+-<em>&lt;endTime&gt;</em>
+gives the number of extra seconds to delay after the time specified
+in the SDP "a=range" attribute.
+(As noted above, the default value for this extra time is 5 seconds.)
+<p>
+For example, if the SDP description contains
+"a=range:npt=0-25", then
+"-e 10"
+means "play the stream(s) for 10 seconds, then exit", and
+"-e -10"
+means "play the stream(s) for 35 seconds, then exit".
+<p>
+You can also use the
+"<strong>-E <em>&lt;maximum-inter-packet-gap&gt;</em></strong>" option
+to ask that the program shut down if no new incoming RTP (i.e., data)
+packets are received within a period of at least
+<em>&lt;maximum-inter-packet-gap&gt;</em>
+seconds.
+This option is useful if you are running the program automatically
+(e.g., from within a script), and wish to allow for the possibility
+of servers that die
+unexpectedly.
+(Note that "-e" and "-E" are different options, and may both be used.)
+<p>
+Note, however, that if
+the program receives a RTCP "BYE" packet from the source - for every stream
+in the session - then the program will close down the session and
+exit immediately, regardless of the use of the "-e" and/or "-E" options.
+<p>
+You can also use the
+"<strong>-c</strong>"
+option to play the media
+sessions continuously.
+I.e., after the end time has elapsed, the program starts all over again,
+by issuing another set of "PLAY" requests.
+(Note that if you're receiving data (i.e., you don't use the "-r" option),
+then this means you'll get multiple copies of the data in
+the output file(s).)
+<p>
+Note that you can combine "-c" with
+"-e <em>&lt;endTime&gt;</em>"
+and/or
+"-E <em>&lt;maximum-inter-packet-gap&gt;</em>".
+So, for example,
+"-c -e 10"
+means "play the stream(s) for 10 seconds, then go back and play
+them again for another 10 seconds, etc., etc."
+
+<p><hr><p>
+
+<a name="access-control"></a>
+<h2>Streaming access-controlled sessions</h2>
+
+Some RTSP servers require user authentication (via a name and password)
+before a session can be streamed.  To stream such a session, use the
+"<strong>-u <em>&lt;username&gt;</em> <em>&lt;password&gt;</em></strong>" option.
+(To specify an empty password, use
+<em>""</em> for <em>&lt;password&gt;</em>.)
+The program authenticates using RTSP "digest authentication"; the password
+will <em>not</em> get sent in the clear over the net.
+<p>
+Alternatively, you could try including the user name and password inside
+the URL, as:
+"rtsp://<em>&lt;username&gt;</em>:<em>&lt;password&gt;</em>@<em>&lt;hostname&gt;</em>:<em>&lt;etc.&gt;</em>".
+(In this case, though, the password <em>will</em> be sent in the clear
+over the net.  Also, not all servers will accept this type of URL.)
+
+<p><hr><p>
+
+<a name="quicktime"></a>
+<h2>Outputting a ".mov", ".mp4", or ".avi"-format file</h2>
+
+Use the
+"<strong>-q</strong>"
+option to output the received data to 'stdout' in the form of an
+Apple
+<a HREF="http://developer.apple.com/documentation/QuickTime/QuickTime.html">QuickTime '.mov'-format file</a>.
+Each received subsession will be have its own track in the output file.
+<p>
+Similarly, the
+"<strong>-4</strong>"
+option produces a '.mp4'-format (i.e., MPEG-4) file.
+<p>
+At present these options are fully supported for only a limited number of codecs.
+For those codecs that are not fully supported, the program will
+still store all of its received data into a movie track, but will
+use a dummy Media Data Atom (named '????') in the Sample Description.
+(This track will also be disabled.)
+Before you can play such a track, you will need to
+edit the file.
+<p>
+If the session contains a video subsession, you should also use the
+"<strong>-w <em>&lt;width&gt;</em></strong>",
+"<strong>-h <em>&lt;height&gt;</em></strong>"
+and
+"<strong>-f <em>&lt;frame-rate&gt;</em></strong>"
+options
+to specify the width and height (in pixels), and frame rate
+(per-second) of the corresponding
+video track.
+(If these options are omitted, then the values width=240 pixels;
+height=180 pixels; frame-rate=15 are used.)
+<p>
+<small>
+Alternatively, if the session's SDP description contains the
+media-level attribute
+"a=x-dimensions: <em>&lt;width&gt;</em>,<em>&lt;height&gt;</em>",
+then these values will be used instead (in which case you won't need
+to use the "-w" and "-h" options).
+Similarly, if the session's SDP description contains the
+media-level attribute
+"a=x-framerate: <em>&lt;frames-per-second&gt;</em>",
+then this value will be used instead (in which case you won't need
+to use the "-f" option).
+</small>
+<p>
+If the resulting QuickTime movie file contains audio and video tracks that
+are out-of-sync, then you can use the 
+"<strong>-y</strong>"
+option to try to generate synchronized audio/video tracks.
+(This option works by listening for RTCP "Sender Report" packets
+- containing time synchronization information - for each stream.
+Some initial, unsynchronized data may end up being discarded.)
+<p>
+The
+"<strong>-H</strong>"
+option will also generate a QuickTime 'hint track' for each audio or video
+track.
+This is useful if you later wish to stream the resulting ".mov" or ".mp4" file.
+<p>
+<small>
+<em>Note:</em>
+"openRTSP"s support for creating QuickTime format files is
+rather limited.
+At present, only PCM (u-law and a-law),
+MPEG-4, GSM
+and QCELP (aka. 'PureVoice') audio is supported,
+and only MPEG-4 and H.263/H.263+ video is supported.
+(Also, for creating <em>hinted</em>
+QuickTime format files, QCELP audio is not currently supported.)
+</small>
+
+<p>
+The
+"<strong>-i</strong>"
+option produces a '.avi'-format file.
+(This functionality is not fully-supported.
+MPEG-1, 2 or 4, JPEG and H.263 video is supported,
+along with raw PCM or u-law audio.
+However, MPEG and other audio codecs are not yet supported.)
+<p><hr><p>
+
+<a name="other-options"></a>
+<h2>Other options</h2>
+
+<h3>Notification of data arrival</h3>
+Use the
+"<strong>-n</strong>"
+option
+if you wish to be 'notified'
+(with a console message)
+when the first data (RTP) packets begin
+arriving.
+<p>
+
+<h3>Receiving streamed data via TCP instead of UDP</h3>
+If you're not receiving any data packets
+(you can test this using "-n"), then you may be behind a firewall
+that (stupidly) blocks UDP packets.
+If this is the case, you can use the
+"<strong>-t</strong>"
+option
+to request that the RTSP server stream RTP and RTCP data packets over
+its TCP connection, instead of using UDP packets.
+(Note that not all RTSP servers support TCP streaming, and that
+TCP cannot be used to receive multicast streams.)
+<p>
+You should use this option only if you are unable to receive UDP packets,
+or if you are recording the stream for later playback, and need to do so
+without packet loss.
+Streaming over TCP can cause incoming data to be excessively delayed,
+which is inappropriate if the data is being processed in real time.
+<p>
+Alternatively, you can use the
+"<strong>-T <em>&lt;http-port-number&gt;</em></strong>"
+option to request that the stream be sent (using TCP) over a
+"<a HREF="http://developer.apple.com/documentation/QuickTime/QTSS/Concepts/chapter_2_section_14.html">RTSP-over-HTTP tunnel</a>", using the specified HTTP port number.
+RTSP-over-HTTP tunneling can be useful if you are behind a HTTP-only firewall.
+(Note, however, that not all RTSP servers support this.)
+
+<p>
+
+<h3>Receiving unsupported RTP payload formats</h3>
+
+Note: An "RTP payload format" for a codec is a set of rules that define how
+the codec's media frames are packed within RTP packets.
+This is usually defined by an IETF RFC
+(or, for newer payload formats, an IETF Internet-Draft).
+<p>
+By default, the program will ignore any subsession whose RTP payload format
+it doesn't understand (because, if it doesn't know the RTP payload format,
+it doesn't know how to extract data from the incoming RTP stream).
+<p>
+However, if an input stream uses a RTP payload format
+that the program does not support, then you <em>may</em> still
+be able to
+receive this data, by using
+the
+"<strong>-s <em>&lt;byte-offset&gt;</em></strong>"
+option.
+This option tells the program to assume that any such unsupported stream
+uses a very 'simple' RTP payload format, in which the stream's data
+is packed contiguously into RTP packets, following the RTP header.
+(In particular, the payload format must not use interleaving.)
+<em>&lt;byte-offset&gt;</em> specifies the size (in bytes) of
+any special header that follows the standard RTP header.
+(This special header is skipped over, and is not interpreted at all.)
+<p>
+For example, if the program didn't already handle PCM u-law audio
+("audio/PCMU"; RTP payload format code 0), then you could receive it using
+the option
+"-s 0".
+If the program didn't already handle MPEG audio
+("audio/MPEG"; RTP payload format code 14), then you could receive it
+using the option
+"-s 4"
+(because the RTP payload format for MPEG audio, defined in RFC 2250,
+specifies a (basically useless) 4-byte header at the start of the RTP payload).
+
+<h3>Outputting QOS statistics</h3>
+Use the "<strong>-Q</strong>" option to output QOS
+("quality of service") statistics about the data stream
+(when the program exits).
+These statistics include the (minimum, average, maximum)
+bitrate, packet loss rate, and inter-packet gap.
+<p>
+The "-Q" option takes an optional
+<em>&lt;measurement-interval&gt;</em>
+parameter, which specifies the length of the
+time intervals - in multiples
+of 100ms - over which the "minimum, average, maximum"
+statistics are computed.
+The default value of this parameter is "10", meaning
+that these statistics are measured every 1 second
+(i.e., 10x100ms). 
+
+<h3>Outputting server options</h3>
+
+By default, the program sends an "OPTIONS" command before sending 
+"DESCRIBE".
+The purpose of the "OPTIONS" command is ask the server to respond with the
+list of commands that it supports.
+<p>
+If the "<strong>-o</strong>" option is given, then the program sends the
+"OPTIONS" command <em>only</em>.
+If the "-o" option is given, then all other command-line options
+- except "-V" (verbose output) - are ignored.
+<p>
+The "<strong>-O</strong>" option has the opposite effect: It tells the
+program to <em>not</em> send an "OPTIONS" command prior to sending
+"DESCRIBE".
+
+
+<h3>Outputting each frame into a separate file</h3>
+If the "<strong>-m</strong>" option is given, each incoming 'frame'
+will be written into a separate output file.
+(Note that 'frame' in this case is a discrete unit of data that comes
+from a 'RTPSource'.  For some RTP payload formats (such as motion-JPEG),
+each file will contain a complete image.
+For other RTP payload formats (such as MPEG video), each file will 
+contain a smaller unit of data, such as a video header structure,
+or a frame 'slice'.)
+To distinguish the output files, each 'frame's presentation time is used
+in the suffix of the corresponding output file.
+
+<h3>Changing the output file buffer size</h3>
+If you see an error message
+<em>"The total received frame size exceeds the client's buffer size"</em>,
+then this indicates that incoming RTP data formed a frame that
+was too large for this program's output file buffer.
+By default, a 20 kByte buffer is used, so this situation usually does not
+occur.
+(It occurs only for codecs - such as JPEG - that can have very large frames.)
+<p>
+If, however,
+you see this error message, you can increase the output file buffer size
+using the "<strong>-b <em>&lt;buffer-size&gt;</em></strong>" option.
+
+<h3>Changing the input network socket buffer size</h3>
+You can also use the
+"<strong>-B <em>&lt;buffer-size&gt;</em></strong>" option
+to change the size of the input buffer that the underlying
+operating system uses for network sockets.
+(You probably won't need to use this option, because the operating system's
+default buffer size is usually sufficient.)
+
+<p><hr><p>
+
+<a name="real-media"></a>
+<h2>A note about RealAudio and RealVideo sessions</h2>
+
+Note that this program <em>cannot</em> be used to receive RealAudio and/or
+RealVideo sessions - even those described by a "rtsp://" URL - because
+these sessions do not use RTP for transport.
+(Instead, these sessions use RealNetworks' proprietary
+"RDT" protocol.)
+
+<p><hr><p>
+
+<a name="source-code"></a>
+<h2>Source code</h2>
+
+This program uses the "RTSPClient", "MediaSession",
+"FileSink", "QuickTimeFileSink",
+and several "*RTPSource" modules from the "liveMedia" library,
+which is distributed as part of the
+"<a HREF="../liveMedia/">LIVE555 Streaming Media</a>"
+source code package.
+(Other RTSP clients could readily be built from this code.)
+<p>
+The source code for the program itself is also bundled with this package,
+as the files "openRTSP.cpp"
+and "playCommon.cpp",
+in the "testProgs" directory.
+See the
+<a HREF="../liveMedia/">"LIVE555 Streaming Media"
+documentation</a>
+for instructions on how to build this program from source.
+<p>
+
+<em>Note:</em>
+If you are looking for an example of how to use the
+"LIVE555 Streaming Media" code to build your own RTSP/RTP media player client,
+then the "openRTSP" source code is not the best example to use, because
+it includes lots of extra 'bells and whistles'.
+Instead, you should look at the
+RTSP/RTP client support in the
+"<a HREF="http://www.live555.com/mplayer/">MPlayer</a>"
+media player.
+(Note, in particular, the files "demux_rtp*" in the
+"libmpdemux" directory.)
+
+<p><hr><p>
+
+<!--
+<a name="binaries"></a>
+<h2>Pre-built binaries</h2>
+
+For convenience, some pre-built executable binary versions of the program
+(for Linux/x86, FreeBSD, Solaris/SPARC, and Windows)
+are also available
+<a HREF="./binaries/">here</a>.
+(These binaries are not always kept up-to-date;
+the best way to ensure you have the latest version of the program is to
+build it from the source code.)
+
+<p><hr><p>
+-->
+
+<a name="support"></a>
+<h2>Support and customization</h2>
+
+If you are interested in seeing new features added to the program
+(e.g., support for additional RTP payload formats
+or QuickTime Media Types),
+or are interested in customizing this program's functionality
+and/or embedding it within your own application,
+please email
+<em>support(at)live555.com</em>
+
+<p><hr><p>
+
+<a name="option-summary"></a>
+<h2>Summary of command-line options</h2>
+(for "openRTSP" and "<a HREF="../playSIP/">playSIP</a>")
+<p>
+<table>
+<tr><td>-4</td><td>output a '.mp4'-format file (to 'stdout')</td></tr>
+<tr><td>-a</td><td>play only the audio stream</td></tr>
+<tr><td>-A <em>&lt;codec-number&gt;</em></td><td>specify the static
+RTP payload format number of the audio codec
+to request from the server
+<em>("playSIP" only)</em>
+</td></tr>
+<tr><td>-b <em>&lt;buffer-size&gt;</em></td><td>change the output file buffer size</td></tr>
+<tr><td>-B <em>&lt;buffer-size&gt;</em></td><td>change the input network socket buffer size</td></tr>
+<tr><td>-c</td><td>play continuously</td></tr>
+<tr><td>-D <em>&lt;MIME-subtype&gt;</em></td><td>specify the MIME subtype of a dynamic RTP payload format for the audio codec
+to request from the server
+<em>("playSIP" only)</em>
+</td></tr>
+<tr><td>-e <em>&lt;endTime&gt;</em></td><td>specify an explicit end time</td></tr>
+<tr><td>-E <em>&lt;maximum-inter-packet-gap&gt;</em></td><td>specify a maximum period of inactivity to wait before exiting</td></tr>
+<tr><td>-f <em>&lt;frame-rate&gt;</em></td><td>specify the video frame rate (used only with "-q", "-4", or "-i")</td></tr>
+<tr><td>-F <em>&lt;fileName-prefix&gt;</em></td><td>specify a prefix for each output file name</td></tr>
+<tr><td>-h <em>&lt;height&gt;</em></td><td>specify the video image height (used only with "-q", "-4", or "-i")</td></tr>
+<tr><td>-H</td><td>output a QuickTime 'hint track' for each audio/video track (used only with "-q" or "-4")</td></tr>
+<tr><td>-i</td><td>output a '.avi'-format file (to 'stdout')</td></tr>
+<tr><td>-l</td><td>try to compensate for packet losses (used only with "-q", "-4", or "-i")</td></tr>
+<tr><td>-m</td><td>output each incoming frame into a separate file</td></tr>
+<tr><td>-n</td><td>be notified when RTP data packets start arriving</td></tr>
+<tr><td>-o</td><td>request the server's command options, without sending "DESCRIBE"
+<em>("openRTSP" only)</em>
+</td></tr>
+<tr><td>-O</td><td>don't request the server's command options; just send "DESCRIBE"
+<em>("openRTSP" only)</em>
+</td></tr>
+<tr><td>-p <em>&lt;startingPortNumber&gt;</em></td><td>specify the client port number(s)</td></tr>
+<tr><td>-Q</td><td>output 'QOS' statistics about the data stream (when the program exits)</td></tr>
+<tr><td>-q</td><td>output a QuickTime '.mov'-format file (to 'stdout')</td></tr>
+<tr><td>-r</td><td>play the RTP streams, but don't receive them ourself</td></tr>
+<tr><td>-s <em>&lt;byte-offset&gt;</em></td><td>assume a simple RTP payload format (skipping over a special header of the specified size)</td></tr>
+<tr><td>-t</td><td>stream RTP/RTCP data over TCP,
+rather than (the usual) UDP.
+<em>("openRTSP" only)</em>
+<tr><td>-T <em>&lt;http-port-number&gt;</em></td><td>like "-t", except using RTSP-over-HTTP tunneling.
+<em>("openRTSP" only)</em>
+</td></tr>
+<tr><td>-u <em>&lt;username&gt;</em> <em>&lt;password&gt;</em></td><td>specify a user name and password for digest authentication</td></tr>
+<tr><td>-V</td><td>print more verbose diagnostic output</td></tr>
+<tr><td>-v</td><td>play only the video stream</td></tr>
+<tr><td>-w <em>&lt;width&gt;</em></td><td>specify the video image width (used only with "-q", "-4", or "-i")</td></tr>
+<tr><td>-y</td><td>try to synchronize the audio and video tracks (used only with "-q" or "-4")</td></tr>
+</table>
+
+<p>
+<hr>
+<small>
+"LIVE555", "openRTSP", "playSIP",
+and the Live Networks logo are trademarks of
+<a HREF="../">Live Networks, Inc.</a>
+</small>
+
+<p>
+      <a href="http://validator.w3.org/check/referer"><img src="http://config.privoxy.org/send-banner?type=auto" border="\0" title="Killed-http://www.w3.org/Icons/valid-html401-by-size" width="88" height="31"></a>
+    </p>
+</body>
+<script>function PrivoxyWindowOpen(a, b, c){return(window.open(a, b, c));}</script></html>

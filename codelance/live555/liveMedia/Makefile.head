@@ -1,0 +1,2 @@
+INCLUDES = -Iinclude -I../UsageEnvironment/include -I../groupsock/include -I../../dep/boost -I../../dep/fifi/src -I../../dep/sak/src -I../../dep/kodo
+##### Change the following for your environment: 

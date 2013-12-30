@@ -1,0 +1,2 @@
+INCLUDES = -Iinclude -I../UsageEnvironment/include -pthread
+##### Change the following for your environment: 

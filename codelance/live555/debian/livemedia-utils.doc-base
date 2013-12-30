@@ -1,0 +1,11 @@
+Document: livemedia-utils
+Title: openRTSP Documentation
+Author: Live Networks, Inc.
+Abstract: "openRTSP" is a command-line program that can be used to open,
+ stream, receive, and (optionally) record media streams that are specified
+ by an RTSP URL - i.e., an URL that begins with rtsp://
+Section: Programming
+
+Format: HTML
+Index: /usr/share/doc/livemedia-utils/openRTSP.html
+Files: /usr/share/doc/livemedia-utils/openRTSP.html

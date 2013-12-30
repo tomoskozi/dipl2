@@ -1,0 +1,19 @@
+Using libliveMedia et al.
+
+   o  Use these flags in CPPFLAGS or CFLAGS/CXXFLAGS:
+
+        -I/usr/include/liveMedia -I/usr/include/groupsock
+        -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment
+
+   o  If you are building a binary object, use these LIBS:
+
+        -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment
+
+   o  If you are building a PIC plug-in that uses libliveMedia, but NOT a
+      library that uses libliveMedia (in that case, link your application
+      with the above flags and use -rdynamic), use these LIBS:
+
+        -lliveMedia_pic -lgroupsock_pic -lBasicUsageEnvironment_pic
+          -lUsageEnvironment_pic
+
+ -- Sam Hocevar <sam@zoy.org>  Tue, 10 Feb 2004 15:04:07 +0100

@@ -1,0 +1,29 @@
+--- a/config.linux
++++ b/config.linux
+@@ -1,4 +1,4 @@
+-COMPILE_OPTS =		$(INCLUDES) -I. -O2 -DSOCKLEN_T=socklen_t -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64
++COMPILE_OPTS =		$(INCLUDES) -I. $(CFLAGS) -DSOCKLEN_T=socklen_t -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64
+ C =			c
+ C_COMPILER =		cc
+ C_FLAGS =		$(COMPILE_OPTS)
+--- a/Makefile.tail
++++ b/Makefile.tail
+@@ -10,12 +10,12 @@
+ MEDIA_SERVER_DIR = mediaServer
+ 
+ all:
+-	cd $(LIVEMEDIA_DIR) ; $(MAKE)
+-	cd $(GROUPSOCK_DIR) ; $(MAKE)
+-	cd $(USAGE_ENVIRONMENT_DIR) ; $(MAKE)
+-	cd $(BASIC_USAGE_ENVIRONMENT_DIR) ; $(MAKE)
+-	cd $(TESTPROGS_DIR) ; $(MAKE)
+-	cd $(MEDIA_SERVER_DIR) ; $(MAKE)
++	cd $(LIVEMEDIA_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
++	cd $(GROUPSOCK_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
++	cd $(USAGE_ENVIRONMENT_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
++	cd $(BASIC_USAGE_ENVIRONMENT_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
++	cd $(TESTPROGS_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
++	cd $(MEDIA_SERVER_DIR) ; CFLAGS="$(CFLAGS)" $(MAKE)
+ 
+ clean:
+ 	cd $(LIVEMEDIA_DIR) ; $(MAKE) clean

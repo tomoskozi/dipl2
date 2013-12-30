@@ -1,0 +1,47 @@
+Source: liblivemedia
+Section: libs
+Priority: optional
+Maintainer: Debian Multimedia Maintainers <pkg-multimedia-maintainers@lists.alioth.debian.org>
+Uploaders: Reinhard Tartler <siretart@tauware.de>,
+           Sam Hocevar (Debian packages) <sam+deb@zoy.org>,
+           Christophe Mutricy <xtophe@videolan.org>
+Build-Depends: debhelper (>= 5.0)
+Standards-Version: 3.9.2
+Homepage: http://live555.com
+Vcs-Git: git://git.debian.org/git/pkg-multimedia/liblivemedia.git
+Vcs-Browser: http://git.debian.org/?p=pkg-multimedia/liblivemedia.git
+
+Package: liblivemedia-dev
+Section: libdevel
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Description: multimedia RTSP streaming library
+ The live555.com streaming media code is a set of C++ libraries for multimedia
+ streaming, using open standard protocols (RTP/RTCP, RTSP, SIP). These
+ libraries can be used to build applications to stream, receive and process
+ MPEG, H.263+ or JPEG video, several audio codecs, and can easily be extended
+ to support additional codecs. They can also be used to build basic RTSP (Real
+ Time Streaming Protocol) or SIP (Session Initiation Protocol) clients and
+ servers.
+ .
+ This package contains the headers and static libraries required to build
+ applications that use live555.com.
+
+Package: livemedia-utils
+Section: net
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Description: multimedia RTSP streaming tools
+ The live555.com streaming media code is a set of C++ libraries for multimedia
+ streaming, using open standard protocols (RTP/RTCP, RTSP, SIP). These
+ libraries can be used to build applications to stream, receive and process
+ MPEG, H.263+ or JPEG video, several audio codecs, and can easily be extended
+ to support additional codecs. They can also be used to build basic RTSP (Real
+ Time Streaming Protocol) or SIP (Session Initiation Protocol) clients and
+ servers.
+ .
+ This package contains the live555.com streaming server (live555MediaServer),
+ the example programs (openRTSP, playSIP, sapWatch, vobStreamer) and a variety
+ of test tools.

@@ -1,0 +1,99 @@
+#!/usr/bin/make -f 
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+CFLAGS = -Wall -g
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -O0
+else
+	CFLAGS += -O2
+endif
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+	INSTALL_PROGRAM += -s
+endif
+
+#helper to update the upstream changelog
+debian/upstream.changelog:
+	wget http://live555.com/liveMedia/public/changelog.txt -O $@
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	./genMakefiles linux
+	touch configure-stamp
+
+build: build-arch build-indep
+build-arch: build-stamp
+build-indep: build-stamp
+build-stamp: configure-stamp
+	dh_testdir
+	cp debian/upstream.changelog changelog.txt
+	for f in BasicUsageEnvironment \
+	            UsageEnvironment liveMedia groupsock; do \
+	  CFLAGS="$(CFLAGS) -fPIC -DPIC" $(MAKE) || exit 1; \
+	  mv "$${f}/lib$${f}.a" "$${f}/lib$${f}_pic.a"; \
+	done
+	$(MAKE) clean
+	CFLAGS="$(CFLAGS)" $(MAKE)
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f changelog.txt
+	rm -f build-stamp configure-stamp
+	[ ! -f Makefile ] || $(MAKE) clean
+	rm -f `find . -name '*.a'`
+	rm -f `find . -name Makefile`
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k 
+	dh_installdirs
+	for f in BasicUsageEnvironment \
+	            UsageEnvironment liveMedia groupsock; do \
+	  dh_install -pliblivemedia-dev "$${f}/include/"*.h* "usr/include/$${f}"; \
+	  dh_install -pliblivemedia-dev "$${f}/lib$${f}.a" "usr/lib"; \
+	  dh_install -pliblivemedia-dev "$${f}/lib$${f}_pic.a" "usr/lib"; \
+	done
+	dh_install -plivemedia-utils mediaServer/live555MediaServer /usr/bin
+	for f in openRTSP playSIP sapWatch testAMRAudioStreamer \
+	          testMP3Receiver testMP3Streamer \
+	          testMPEG1or2AudioVideoStreamer \
+	          testMPEG1or2AudioVideoToDarwin \
+	          testMPEG1or2ProgramToTransportStream \
+	          testMPEG1or2Splitter testMPEG1or2VideoReceiver \
+	          testMPEG1or2VideoStreamer testMPEG2TransportStreamer \
+	          testMPEG4VideoStreamer testMPEG4VideoToDarwin \
+	          testOnDemandRTSPServer testRelay testWAVAudioStreamer \
+		  MPEG2TransportStreamIndexer \
+	          vobStreamer; do \
+	  dh_install -plivemedia-utils "testProgs/$${f}" "usr/bin"; \
+	done
+	dh_install -plivemedia-utils debian/openRTSP.html usr/share/doc/livemedia-utils
+
+binary-indep: build install
+
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs changelog.txt
+	dh_installdocs
+	dh_installexamples
+	dh_installman
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install debian/upstream.changelog
